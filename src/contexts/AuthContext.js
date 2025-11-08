@@ -20,56 +20,7 @@ const actionTypes = {
   UPDATE_USER: 'UPDATE_USER'
 };
 
-// Add this function to AuthContext.js
 
-const validateToken = useCallback(async (token) => {
-  try {
-    // Try to get profile with the token
-    const response = await authService.getProfile(token);
-    return response.success;
-  } catch (error) {
-    console.error('Token validation failed:', error);
-    return false;
-  }
-}, []);
-
-// Update checkAuth function:
-const checkAuth = useCallback(async () => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    try {
-      // Validate token first
-      const isValid = await validateToken(token);
-      
-      if (!isValid) {
-        console.warn('Token is invalid, clearing...');
-        localStorage.removeItem('token');
-        dispatch({ type: actionTypes.LOGOUT });
-        return;
-      }
-
-      const response = await authService.getProfile(token);
-      if (response.success) {
-        dispatch({
-          type: actionTypes.LOGIN_SUCCESS,
-          payload: {
-            user: response.data.user,
-            token: token
-          }
-        });
-      } else {
-        localStorage.removeItem('token');
-        dispatch({ type: actionTypes.LOGOUT });
-      }
-    } catch (error) {
-      console.error('Auth check failed:', error);
-      localStorage.removeItem('token');
-      dispatch({ type: actionTypes.LOGOUT });
-    }
-  } else {
-    dispatch({ type: actionTypes.SET_LOADING, payload: false });
-  }
-}, [validateToken]);
 
 // Reducer
 const authReducer = (state, action) => {
