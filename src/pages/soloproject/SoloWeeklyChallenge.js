@@ -302,173 +302,143 @@ function SoloWeeklyChallenge() {
     };
   };
 
-  useEffect(() => {
-    let isMounted = true;
+// FRONTEND FIX: src/pages/soloproject/SoloWeeklyChallenge.js
+// Replace the useEffect hook with this improved version
 
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+useEffect(() => {
+  let isMounted = true;
 
-        console.log('Loading weekly challenge for project:', projectId);
+  const load = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        // 1) Get project language information
-        const dashboardRes = await SoloProjectService.getDashboardData(projectId);
-        const dashboardData = dashboardRes?.data || {};
-        
-        const langId = dashboardData.project?.programming_language_id;
-        const langName = dashboardData.project?.programming_language?.name;
+      console.log('Loading weekly challenge for project:', projectId);
 
-        console.log('Project language info:', { langId, langName });
-
-        if (!langId) {
-          if (isMounted) {
-            setError('Project programming language not found. Please set up your project language first.');
-            setLoading(false);
-          }
-          return;
+      // 1) Get project language information
+      const dashboardRes = await SoloProjectService.getDashboardData(projectId);
+      const dashboardData = dashboardRes?.data || {};
+      
+      console.log('📦 Dashboard response:', dashboardData);
+      console.log('📦 Project data:', dashboardData.project);
+      console.log('📦 Programming languages array:', dashboardData.project?.programming_languages);
+      
+      // ✅ IMPROVED: Try multiple ways to get the language ID
+      let langId = null;
+      let langName = null;
+      
+      // Method 1: Direct property (set by backend)
+      if (dashboardData.project?.programming_language_id) {
+        langId = dashboardData.project.programming_language_id;
+        langName = dashboardData.project?.programming_language?.name;
+        console.log('✅ Method 1: Found language via direct property:', { langId, langName });
+      }
+      
+      // Method 2: Through programming_languages array (primary)
+      if (!langId && dashboardData.project?.programming_languages) {
+        const primaryLang = dashboardData.project.programming_languages.find(pl => pl.is_primary);
+        if (primaryLang && primaryLang.programming_languages) {
+          langId = primaryLang.programming_languages.id;
+          langName = primaryLang.programming_languages.name;
+          console.log('✅ Method 2: Found primary language via array:', { langId, langName });
         }
+      }
+      
+      // Method 3: First available language in array
+      if (!langId && dashboardData.project?.programming_languages?.length > 0) {
+        const firstLang = dashboardData.project.programming_languages[0];
+        if (firstLang && firstLang.programming_languages) {
+          langId = firstLang.programming_languages.id;
+          langName = firstLang.programming_languages.name;
+          console.log('✅ Method 3: Found first language via array:', { langId, langName });
+        }
+      }
 
-        if (!isMounted) return;
-        setLanguageId(langId);
-        setLanguageName(langName || '');
+      console.log('🔍 Final language info:', { langId, langName });
 
-        // 2) Use the BETTER approach: Get challenges by language specifically
-        const challengesRes = await ChallengeAPI.getChallengesByLanguage(langId, {
-          project_id: projectId,
-          page: 1,
-          limit: 20
-        });
-
-        const allChallenges = challengesRes?.data?.challenges || [];
-        console.log('Found challenges for language:', allChallenges.length);
-
-        // 3) Get user attempts - FIXED: Filter by project_id
-        const attemptsRes = await ChallengeAPI.getUserAttempts({ page: 1, limit: 50 });
-        const allAttempts = attemptsRes?.data?.data?.attempts || attemptsRes?.data?.attempts || [];
-        
-        // ✅ CRITICAL FIX: Filter attempts to only include those for THIS project
-        const attempts = allAttempts.filter(a => a.project_id === projectId);
-        
-        console.log('Total attempts:', allAttempts.length, 'Attempts for this project:', attempts.length);
-
-        // Filter out challenges attempted in the last 14 days FOR THIS PROJECT
-        // ✅ CRITICAL FIX: Check if user already attempted ANY challenge THIS WEEK
-        const startOfWeek = getStartOfWeek();
-        console.log('Start of current week:', startOfWeek.toISOString());
-
-        const attemptsThisWeek = attempts.filter(a => {
-          const attemptDate = new Date(a.submitted_at || a.started_at || 0);
-          return attemptDate >= startOfWeek;
-        });
-
-        console.log('Attempts this week:', attemptsThisWeek.length);
-
-        // ✅ If user already attempted a challenge this week, show message
-        if (attemptsThisWeek.length > 0 && isMounted) {
-          const lastAttempt = attemptsThisWeek[0];
-          const challengeDetail = allChallenges.find(ch => ch.id === lastAttempt.challenge_id);
+      // ✅ IMPROVED: Better error handling with actionable guidance
+      if (!langId) {
+        if (isMounted) {
+          const errorMessage = dashboardData.project?.missing_language 
+            ? 'Your solo project doesn\'t have a programming language set. Please go to Project Info and add a programming language.'
+            : 'Project programming language not found. Please set up your project language first.';
           
-          // Calculate days until next Monday
-          const now = new Date();
-          const nextMonday = new Date(startOfWeek);
-          nextMonday.setDate(nextMonday.getDate() + 7);
-          const daysUntilNextWeek = Math.ceil((nextMonday - now) / (24 * 60 * 60 * 1000));
+          setError(errorMessage);
+          setLoading(false);
+        }
+        return;
+      }
 
-          setCurrentChallenge({
-            alreadyCompleted: true,
-            completedChallenge: {
-              title: challengeDetail?.title || 'Weekly Challenge',
-              completedAt: lastAttempt.submitted_at || lastAttempt.started_at,
-              score: lastAttempt.score || 0,
-              status: lastAttempt.status,
-              feedback: lastAttempt.feedback
-            },
+      if (!isMounted) return;
+      setLanguageId(langId);
+      setLanguageName(langName || '');
+
+      // 2) Use the BETTER approach: Get challenges by language specifically
+      console.log('🔍 Fetching challenges for language ID:', langId);
+      
+      const challengesRes = await ChallengeAPI.getChallengesByLanguage(langId, {
+        project_id: projectId,
+        page: 1,
+        limit: 20
+      });
+
+      const allChallenges = challengesRes?.data?.challenges || [];
+      console.log('Found challenges for language:', allChallenges.length);
+
+      if (allChallenges.length === 0) {
+        if (isMounted) {
+          setError(`No challenges available for ${langName || 'this language'}. Please check back later or contact support.`);
+          setLoading(false);
+        }
+        return;
+      }
+
+      // 3) Get user attempts - FIXED: Filter by project_id
+      const attemptsRes = await ChallengeAPI.getUserAttempts({ page: 1, limit: 50 });
+      const allAttempts = attemptsRes?.data?.data?.attempts || attemptsRes?.data?.attempts || [];
+      
+      // ✅ CRITICAL FIX: Filter attempts to only include those for THIS project
+      const attempts = allAttempts.filter(a => a.project_id === projectId);
+      
+      console.log('Total attempts:', allAttempts.length, 'Attempts for this project:', attempts.length);
+
+      // Filter out challenges attempted in the last 14 days FOR THIS PROJECT
+      // ✅ CRITICAL FIX: Check if user already attempted ANY challenge THIS WEEK
+      const startOfWeek = getStartOfWeek();
+      console.log('Start of current week:', startOfWeek.toISOString());
+
+      const attemptsThisWeek = attempts.filter(a => {
+        const attemptDate = new Date(a.submitted_at || a.started_at || 0);
+        return attemptDate >= startOfWeek;
+      });
+
+      console.log('Attempts this week:', attemptsThisWeek.length);
+
+      // ✅ If user already attempted a challenge this week, show message
+      if (attemptsThisWeek.length > 0 && isMounted) {
+        const lastAttempt = attemptsThisWeek[0];
+        const challengeDetail = allChallenges.find(ch => ch.id === lastAttempt.challenge_id);
+        
+        // Calculate days until next Monday
+        const now = new Date();
+        const nextMonday = new Date(startOfWeek);
+        nextMonday.setDate(nextMonday.getDate() + 7);
+        const daysUntilNextWeek = Math.ceil((nextMonday - now) / (24 * 60 * 60 * 1000));
+
+        setCurrentChallenge({
+          alreadyCompleted: true,
+          completedChallenge: {
+            title: challengeDetail?.title || 'Weekly Challenge',
+            completedAt: lastAttempt.submitted_at || lastAttempt.started_at,
+            score: lastAttempt.score || 0,
             daysUntilNext: daysUntilNextWeek
-          });
-          
-          // Still show past challenges
-          const pastAttempts = attempts
-            .filter(a => {
-              const challengeInList = allChallenges.find(ch => ch.id === a.challenge_id);
-              return challengeInList && 
-                    challengeInList.programming_language_id === langId &&
-                    a.project_id === projectId;
-            })
-            .map(a => {
-              const challengeDetail = allChallenges.find(ch => ch.id === a.challenge_id);
-              return {
-                id: a.challenge_id,
-                title: challengeDetail?.title || 'Challenge',
-                difficulty: challengeDetail?.difficulty_level || 'medium',
-                points: mapDifficultyToPoints(challengeDetail?.difficulty_level),
-                category: 'algorithms',
-                completedAt: a.submitted_at || a.reviewed_at || a.started_at,
-                score: a.score || 0,
-                timeSpent: a.solve_time_minutes
-                  ? `${a.solve_time_minutes} minutes`
-                  : a.execution_time_ms
-                  ? `${Math.round(a.execution_time_ms / 1000)}s`
-                  : '—',
-                status: a.status === 'passed' ? 'completed' : 'missed'
-              };
-            })
-            .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
-
-          if (isMounted) setPastChallenges(pastAttempts);
-          if (isMounted) setLoading(false);
-          return; // ← STOP HERE - Don't show new challenge
-        }
-
-        // ✅ If no attempts this week, proceed to show a new challenge
-        // Filter out challenges attempted in the last 7 days (to avoid immediate repeats)
-        const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // Changed from 14 to 7
-        const recentAttemptIds = new Set(
-          attempts
-            .filter(a => new Date(a.started_at || a.submitted_at || 0) > since)
-            .map(a => a.challenge_id)
-        );
-
-        const availableChallenges = allChallenges.filter(ch => !recentAttemptIds.has(ch.id));
-
-        console.log('Available challenges after filtering:', availableChallenges.length);
-        console.log('Recent attempt IDs (last 7 days):', Array.from(recentAttemptIds));
-
-        // 4) Pick the next challenge (prefer project-specific, then general)
-        let nextChallenge = null;
-
-        if (availableChallenges.length > 0) {
-          const projectSpecific = availableChallenges.filter(ch => ch.project_id === projectId);
-          const general = availableChallenges.filter(ch => !ch.project_id);
-          
-          if (projectSpecific.length > 0) {
-            nextChallenge = projectSpecific[Math.floor(Math.random() * projectSpecific.length)];
-            console.log('Selected project-specific challenge:', nextChallenge.title);
-          } else if (general.length > 0) {
-            nextChallenge = general[Math.floor(Math.random() * general.length)];
-            console.log('Selected general challenge:', nextChallenge.title);
           }
-        }
+        });
 
-        if (nextChallenge && isMounted) {
-          const formatted = formatChallengeForUI(nextChallenge);
-          
-          // Set submission language default
-          if (langName) {
-            setSubmission(prev => ({ ...prev, language: langName.toLowerCase() }));
-          }
-          
-          setCurrentChallenge(formatted);
-        } else if (isMounted) {
-          setCurrentChallenge(null);
-          setError(`No ${langName || 'programming'} challenges available. You've completed all available challenges! Check back next week for new ones.`);
-        }
-
-        // 5) Set up past challenges - ✅ CRITICAL FIX: Only from this language AND this project
+        // Still show past challenges even if completed this week
         const pastAttempts = attempts
           .filter(a => {
             const challengeInList = allChallenges.find(ch => ch.id === a.challenge_id);
-            // ✅ CRITICAL: Only include attempts for THIS project that match the language
             return challengeInList && 
                    challengeInList.programming_language_id === langId &&
                    a.project_id === projectId;
@@ -494,22 +464,100 @@ function SoloWeeklyChallenge() {
           .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
 
         if (isMounted) setPastChallenges(pastAttempts);
-
-      } catch (err) {
-        console.error('Error loading weekly challenge:', err);
-        if (isMounted) {
-          setError(err?.response?.data?.message || err.message || 'Failed to load weekly challenge');
-        }
-      } finally {
         if (isMounted) setLoading(false);
+        return; // ← STOP HERE - Don't show new challenge
       }
-    };
 
-    load();
-    return () => {
-      isMounted = false;
-    };
-  }, [projectId]);
+      // ✅ If no attempts this week, proceed to show a new challenge
+      // Filter out challenges attempted in the last 7 days (to avoid immediate repeats)
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const recentAttemptIds = new Set(
+        attempts
+          .filter(a => new Date(a.started_at || a.submitted_at || 0) > since)
+          .map(a => a.challenge_id)
+      );
+
+      const availableChallenges = allChallenges.filter(ch => !recentAttemptIds.has(ch.id));
+
+      console.log('Available challenges after filtering:', availableChallenges.length);
+      console.log('Recent attempt IDs (last 7 days):', Array.from(recentAttemptIds));
+
+      // 4) Pick the next challenge (prefer project-specific, then general)
+      let nextChallenge = null;
+
+      if (availableChallenges.length > 0) {
+        const projectSpecific = availableChallenges.filter(ch => ch.project_id === projectId);
+        const general = availableChallenges.filter(ch => !ch.project_id);
+        
+        if (projectSpecific.length > 0) {
+          nextChallenge = projectSpecific[Math.floor(Math.random() * projectSpecific.length)];
+          console.log('Selected project-specific challenge:', nextChallenge.title);
+        } else if (general.length > 0) {
+          nextChallenge = general[Math.floor(Math.random() * general.length)];
+          console.log('Selected general challenge:', nextChallenge.title);
+        }
+      }
+
+      if (nextChallenge && isMounted) {
+        const formatted = formatChallengeForUI(nextChallenge);
+        
+        // Set submission language default
+        if (langName) {
+          setSubmission(prev => ({ ...prev, language: langName.toLowerCase() }));
+        }
+        
+        setCurrentChallenge(formatted);
+      } else if (isMounted) {
+        setCurrentChallenge(null);
+        setError(`No ${langName || 'programming'} challenges available. You've completed all available challenges! Check back next week for new ones.`);
+      }
+
+      // 5) Set up past challenges - ✅ CRITICAL FIX: Only from this language AND this project
+      const pastAttempts = attempts
+        .filter(a => {
+          const challengeInList = allChallenges.find(ch => ch.id === a.challenge_id);
+          // ✅ CRITICAL: Only include attempts for THIS project that match the language
+          return challengeInList && 
+                 challengeInList.programming_language_id === langId &&
+                 a.project_id === projectId;
+        })
+        .map(a => {
+          const challengeDetail = allChallenges.find(ch => ch.id === a.challenge_id);
+          return {
+            id: a.challenge_id,
+            title: challengeDetail?.title || 'Challenge',
+            difficulty: challengeDetail?.difficulty_level || 'medium',
+            points: mapDifficultyToPoints(challengeDetail?.difficulty_level),
+            category: 'algorithms',
+            completedAt: a.submitted_at || a.reviewed_at || a.started_at,
+            score: a.score || 0,
+            timeSpent: a.solve_time_minutes
+              ? `${a.solve_time_minutes} minutes`
+              : a.execution_time_ms
+              ? `${Math.round(a.execution_time_ms / 1000)}s`
+              : '—',
+            status: a.status === 'passed' ? 'completed' : 'missed'
+          };
+        })
+        .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+
+      if (isMounted) setPastChallenges(pastAttempts);
+
+    } catch (err) {
+      console.error('Error loading weekly challenge:', err);
+      if (isMounted) {
+        setError(err?.response?.data?.message || err.message || 'Failed to load weekly challenge');
+      }
+    } finally {
+      if (isMounted) setLoading(false);
+    }
+  };
+
+  load();
+  return () => {
+    isMounted = false;
+  };
+}, [projectId]);
 
 
   const handleSubmitChallenge = async (e) => {
