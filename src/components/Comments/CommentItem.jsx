@@ -187,16 +187,7 @@ const CommentItem = ({
                 {comment.content}
             </div>
 
-            {comment.mentions && Array.isArray(comment.mentions) && comment.mentions.length > 0 && (
-                <div className="comment-mentions">
-                    <span className="mentions-label">Mentioned:</span>
-                    {comment.mentions.map((userId, index) => (
-                        <span key={`${userId}-${index}`} className="mention-badge">
-                            @{getAuthorName(userId)}
-                        </span>
-                    ))}
-                </div>
-            )}
+           
 
             <div className="comment-actions">
                 {!isReply && (

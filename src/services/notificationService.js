@@ -1,7 +1,9 @@
 // frontend/src/services/notificationService.js
 class NotificationService {
     constructor() {
-        this.baseURL = '/api/notifications';
+        // Use the same API URL pattern as other services
+        const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+        this.baseURL = `${API_URL}/notifications`;
     }
 
     async getCommentNotifications(params = {}) {
@@ -101,6 +103,35 @@ class NotificationService {
             return data;
         } catch (error) {
             console.error('🔔 NotificationService: Error in getUnreadCount:', error);
+            throw error;
+        }
+    }
+
+    async deleteNotification(notificationId) {
+        try {
+            console.log('🔔 NotificationService: Deleting notification:', notificationId);
+            
+            const response = await fetch(`${this.baseURL}/${notificationId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            console.log('🔔 NotificationService: Delete response status:', response.status);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('🔔 NotificationService: Delete error:', errorText);
+                throw new Error(`Failed to delete notification: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('🔔 NotificationService: Delete success:', data);
+            return data;
+        } catch (error) {
+            console.error('🔔 NotificationService: Error in deleteNotification:', error);
             throw error;
         }
     }
