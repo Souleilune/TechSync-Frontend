@@ -36,6 +36,8 @@ const CommentForm = ({
         setError(null);
 
         try {
+            console.log('📤 Submitting comment to:', `${API_URL}/comments/task/${taskId}`);
+            
             // ✅ FIX: Use full API URL instead of relative path
             const response = await fetch(`${API_URL}/comments/task/${taskId}`, {
                 method: 'POST',
@@ -51,6 +53,7 @@ const CommentForm = ({
             });
 
             const data = await response.json();
+            console.log('📥 Comment response:', data);
 
             if (!response.ok) {
                 throw new Error(data.error || 'Failed to create comment');
@@ -58,7 +61,11 @@ const CommentForm = ({
 
             setContent('');
             setMentions([]);
-            onCommentCreated(data.comment);
+            
+            // ✅ Pass the comment from the response
+            if (data.comment) {
+                onCommentCreated(data.comment);
+            }
 
             if (onCancel) {
                 onCancel();
