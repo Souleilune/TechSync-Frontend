@@ -5,6 +5,9 @@ import CommentForm from './CommentForm';
 import LoadingSpinner from '../UI/LoadingSpinner';
 import './Comments.css';
 
+// ✅ FIX: Get API URL from environment variable
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 const CommentsContainer = ({ taskId, projectMembers = [], projectOwner = null }) => {
     const [comments, setComments] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -18,14 +21,14 @@ const CommentsContainer = ({ taskId, projectMembers = [], projectOwner = null })
     const { user } = useAuth();
     const commentsEndRef = useRef(null);
 
-    // Use useCallback to fix dependency warnings
     const fetchComments = useCallback(async (page = 1) => {
         try {
             setLoading(true);
             setError(null);
 
+            // ✅ FIX: Use full API URL instead of relative path
             const response = await fetch(
-                `/api/comments/task/${taskId}?page=${page}&limit=${pagination.limit}`,
+                `${API_URL}/comments/task/${taskId}?page=${page}&limit=${pagination.limit}`,
                 {
                     headers: {
                         'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -40,12 +43,17 @@ const CommentsContainer = ({ taskId, projectMembers = [], projectOwner = null })
             }
 
             if (page === 1) {
-                setComments(data.comments);
+                setComments(data.comments || []);
             } else {
-                setComments(prev => [...prev, ...data.comments]);
+                setComments(prev => [...prev, ...(data.comments || [])]);
             }
             
-            setPagination(data.pagination);
+            setPagination(data.pagination || {
+                page: parseInt(page),
+                limit: parseInt(pagination.limit),
+                total: 0,
+                pages: 0
+            });
 
         } catch (error) {
             console.error('Error fetching comments:', error);
@@ -62,13 +70,13 @@ const CommentsContainer = ({ taskId, projectMembers = [], projectOwner = null })
     }, [taskId, fetchComments]);
 
     const handleCommentCreated = (newComment) => {
+        console.log('📥 New comment received:', newComment);
         setComments(prev => [newComment, ...prev]);
         setPagination(prev => ({
             ...prev,
             total: prev.total + 1
         }));
         
-        // Scroll to top to show new comment
         scrollToTop();
     };
 
@@ -82,18 +90,20 @@ const CommentsContainer = ({ taskId, projectMembers = [], projectOwner = null })
         setComments(prev => prev.filter(comment => comment.id !== commentId));
         setPagination(prev => ({
             ...prev,
-            total: prev.total - 1
+            total: Math.max(0, prev.total - 1)
         }));
     };
 
     const loadMoreComments = () => {
-        if (pagination.page < pagination.pages) {
+        if (pagination.page < pagination.pages && !loading) {
             fetchComments(pagination.page + 1);
         }
     };
 
     const scrollToTop = () => {
-        commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        if (commentsEndRef.current) {
+            commentsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
     };
 
     if (loading && comments.length === 0) {
@@ -118,39 +128,52 @@ const CommentsContainer = ({ taskId, projectMembers = [], projectOwner = null })
             {error && (
                 <div className="error-message">
                     <p>{error}</p>
-                    <button onClick={() => fetchComments()}>Try Again</button>
+                    <button onClick={() => fetchComments()} className="btn-secondary">
+                        Try Again
+                    </button>
                 </div>
             )}
 
             <CommentForm
                 taskId={taskId}
                 projectMembers={projectMembers}
-                projectOwner={projectOwner} /* ✅ NEW: Pass project owner */
+                projectOwner={projectOwner}
                 onCommentCreated={handleCommentCreated}
                 placeholder="Add a comment..."
             />
 
             <div ref={commentsEndRef} />
 
-            <CommentsList
-                comments={comments}
-                projectMembers={projectMembers}
-                projectOwner={projectOwner} /* ✅ NEW: Pass project owner to replies */
-                currentUser={user}
-                onCommentUpdated={handleCommentUpdated}
-                onCommentDeleted={handleCommentDeleted}
-            />
+            {comments.length > 0 ? (
+                <>
+                    <CommentsList
+                        comments={comments}
+                        taskId={taskId}
+                        projectMembers={projectMembers}
+                        projectOwner={projectOwner}
+                        currentUser={user}
+                        onCommentUpdated={handleCommentUpdated}
+                        onCommentDeleted={handleCommentDeleted}
+                    />
 
-            {pagination.page < pagination.pages && (
-                <div className="load-more-container">
-                    <button
-                        onClick={loadMoreComments}
-                        disabled={loading}
-                        className="btn-secondary"
-                    >
-                        {loading ? 'Loading...' : 'Load More Comments'}
-                    </button>
-                </div>
+                    {pagination.page < pagination.pages && (
+                        <div className="load-more-container">
+                            <button
+                                onClick={loadMoreComments}
+                                disabled={loading}
+                                className="btn-secondary"
+                            >
+                                {loading ? 'Loading...' : 'Load More Comments'}
+                            </button>
+                        </div>
+                    )}
+                </>
+            ) : (
+                !loading && (
+                    <div className="no-comments">
+                        <p>No comments yet. Be the first to comment!</p>
+                    </div>
+                )
             )}
         </div>
     );
