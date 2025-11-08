@@ -1,11 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import MentionInput from './MentionInput';
 
+// ✅ FIX: Get API URL from environment variable
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 const CommentForm = ({ 
     taskId, 
     parentCommentId = null,
     projectMembers = [],
-    projectOwner = null, // ✅ NEW: Add project owner prop
+    projectOwner = null,
     onCommentCreated,
     onCancel,
     initialContent = '',
@@ -33,7 +36,8 @@ const CommentForm = ({
         setError(null);
 
         try {
-            const response = await fetch(`/api/comments/task/${taskId}`, {
+            // ✅ FIX: Use full API URL instead of relative path
+            const response = await fetch(`${API_URL}/comments/task/${taskId}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -91,7 +95,7 @@ const CommentForm = ({
                 onChange={setContent}
                 onMentionsChange={setMentions}
                 projectMembers={projectMembers}
-                projectOwner={projectOwner} /* ✅ NEW: Pass project owner */
+                projectOwner={projectOwner}
                 placeholder={placeholder}
                 disabled={isSubmitting}
             />
@@ -99,12 +103,14 @@ const CommentForm = ({
             <div className="comment-form-actions">
                 <div className="character-count">
                     <span className={
-                        content.length > 1800 ? 'error' : 
-                        content.length > 1500 ? 'warning' : ''
+                        content.length > 1800 ? 'text-warning' : 
+                        content.length > 1950 ? 'text-danger' : 
+                        'text-muted'
                     }>
                         {content.length}/2000
                     </span>
                 </div>
+
                 <div className="button-group">
                     {onCancel && (
                         <button
