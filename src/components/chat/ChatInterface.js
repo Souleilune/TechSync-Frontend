@@ -54,6 +54,7 @@ const ChatInterface = ({ projectId }) => {
   // Initialize chat when component mounts
   useEffect(() => {
     if (projectId && connected) {
+      console.log('🚀 Initializing chat for project:', projectId);
       joinProjectRooms(projectId);
       fetchChatRooms(projectId);
     }
@@ -62,6 +63,7 @@ const ChatInterface = ({ projectId }) => {
   // Load messages when active room changes
   useEffect(() => {
     if (activeRoom && projectId) {
+      console.log('📨 Loading messages for room:', activeRoom);
       fetchMessages(projectId, activeRoom);
     }
   }, [activeRoom, projectId, fetchMessages]);
@@ -71,48 +73,68 @@ const ChatInterface = ({ projectId }) => {
     scrollToBottom();
   }, [messages, activeRoom]);
 
+  // ✅ DEBUG: Log messages state when it changes
+  useEffect(() => {
+    console.log('🟢 Messages state updated:', messages);
+    console.log('🟢 Active room:', activeRoom);
+    if (activeRoom) {
+      const currentRoomMessages = messages[activeRoom] || [];
+      console.log(`🟢 Messages in active room (${activeRoom}):`, currentRoomMessages.length);
+      currentRoomMessages.forEach((msg, idx) => {
+        console.log(`  Message ${idx}:`, {
+          id: msg.id,
+          hasUser: !!msg.user,
+          user: msg.user,
+          content: msg.content?.substring(0, 30)
+        });
+      });
+    }
+  }, [messages, activeRoom]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleSendMessage = async () => {  // ✅ Make it async
-  if (!messageInput.trim() || !activeRoom) return;
+  const handleSendMessage = async () => {
+    if (!messageInput.trim() || !activeRoom) return;
 
-  if (editingMessage) {
-    editMessage(editingMessage.id, messageInput);
-    setEditingMessage(null);
-  } else {
-    // Send the message
-    sendMessage(activeRoom, messageInput, 'text', replyingTo?.id);
-    setReplyingTo(null);
-    
-    // ✅ LOG ACTIVITY - Add this block
-    try {
-      const { projectService } = await import('../../services/projectService');
-      await projectService.logActivity(projectId, {
-        action: 'sent message',
-        target: messageInput.length > 50 
-          ? messageInput.substring(0, 50) + '...' 
-          : messageInput,
-        type: 'message_sent',
-        metadata: { 
-          roomId: activeRoom,
-          roomName: activeRoomData?.name || 'Unknown Room'
-        }
-      });
-      console.log('✅ Activity logged for message send');
-    } catch (activityError) {
-      console.error('Failed to log activity:', activityError);
-      // Don't block message sending if activity logging fails
+    console.log('📤 Sending message:', messageInput.substring(0, 50));
+
+    if (editingMessage) {
+      editMessage(editingMessage.id, messageInput);
+      setEditingMessage(null);
+    } else {
+      // Send the message
+      sendMessage(activeRoom, messageInput, 'text', replyingTo?.id);
+      setReplyingTo(null);
+      
+      // Log activity
+      try {
+        const { projectService } = await import('../../services/projectService');
+        await projectService.logActivity(projectId, {
+          action: 'sent message',
+          target: messageInput.length > 50 
+            ? messageInput.substring(0, 50) + '...' 
+            : messageInput,
+          type: 'message_sent',
+          metadata: { 
+            roomId: activeRoom,
+            roomName: activeRoomData?.name || 'Unknown Room'
+          }
+        });
+        console.log('✅ Activity logged for message send');
+      } catch (activityError) {
+        console.error('Failed to log activity:', activityError);
+      }
     }
-  }
 
-  setMessageInput('');
-  if (typingTimer) {
-    clearTimeout(typingTimer);
-    stopTyping(activeRoom);
-  }
-};
+    setMessageInput('');
+    if (typingTimer) {
+      clearTimeout(typingTimer);
+      stopTyping(activeRoom);
+    }
+  };
+
   const handleInputChange = (e) => {
     setMessageInput(e.target.value);
     
@@ -175,6 +197,10 @@ const ChatInterface = ({ projectId }) => {
   const activeRoomData = chatRooms.find(room => room.id === activeRoom);
   const currentMessages = activeRoom ? (messages[activeRoom] || []) : [];
   const currentTypingUsers = activeRoom ? (typingUsers[activeRoom] || {}) : {};
+
+  // ✅ DEBUG: Log current messages before rendering
+  console.log('🎨 Rendering ChatInterface');
+  console.log('🎨 Current messages count:', currentMessages.length);
 
   if (loading) {
     return (
@@ -349,6 +375,23 @@ const ChatInterface = ({ projectId }) => {
       }}>
         {activeRoomData ? (
           <>
+            {/* Chat Header */}
+            <div style={{ 
+              padding: '20px', 
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+              backgroundColor: 'rgba(26, 28, 32, 0.95)',
+              backdropFilter: 'blur(20px)'
+            }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', color: 'white', margin: 0 }}>
+                # {activeRoomData.name}
+              </h3>
+              {activeRoomData.description && (
+                <p style={{ fontSize: '14px', color: '#9ca3af', margin: '4px 0 0 0' }}>
+                  {activeRoomData.description}
+                </p>
+              )}
+            </div>
+
             {/* Messages Area */}
             <div style={{ 
               flex: 1, 
@@ -361,13 +404,99 @@ const ChatInterface = ({ projectId }) => {
             }}>
               {/* Messages Container */}
               <div style={{ flex: 1, paddingBottom: '16px' }}>
-                {currentMessages.map((message) => {
-                  if (!message || !message.user) {
-                    console.warn('Message or user is undefined:', message);
+                {currentMessages.length === 0 && (
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center', 
+                    height: '100%', 
+                    color: '#9ca3af',
+                    fontSize: '14px'
+                  }}>
+                    No messages yet. Start the conversation!
+                  </div>
+                )}
+                
+                {currentMessages.map((message, index) => {
+                  // ✅ DEBUG: Log each message before processing
+                  console.log(`🟡 Processing message ${index}:`, {
+                    id: message.id,
+                    hasUser: !!message.user,
+                    hasUsers: !!message.users, // Check alternative field name
+                    user: message.user,
+                    users: message.users,
+                    user_id: message.user_id,
+                    content: message.content?.substring(0, 30)
+                  });
+
+                  // ✅ FIX: Handle both 'user' and 'users' field names (Supabase can return either)
+                  const messageUser = message.user || message.users;
+
+                  if (!message || !messageUser) {
+                    console.warn('❌ Message filtered out - missing user:', message);
+                    // ✅ FIX: Try to display the message anyway with fallback user info
+                    if (message && message.content) {
+                      const fallbackUser = {
+                        id: message.user_id,
+                        username: 'Unknown',
+                        full_name: 'Unknown User'
+                      };
+                      console.log('⚠️ Using fallback user for message:', message.id);
+                      
+                      const isOwnMessage = user && message.user_id === user.id;
+
+                      return (
+                        <div 
+                          key={message.id || index} 
+                          style={{ 
+                            marginBottom: '16px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: isOwnMessage ? 'flex-end' : 'flex-start',
+                            width: '100%'
+                          }}
+                        >
+                          <div style={{ 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            gap: '4px', 
+                            maxWidth: '70%',
+                            alignItems: isOwnMessage ? 'flex-end' : 'flex-start'
+                          }}>
+                            <div style={{ 
+                              display: 'flex', 
+                              gap: '8px', 
+                              alignItems: 'center',
+                              justifyContent: isOwnMessage ? 'flex-end' : 'flex-start'
+                            }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#d1d5db' }}>
+                                {isOwnMessage ? 'You' : getUserDisplayName(fallbackUser)}
+                              </span>
+                              <span style={{ fontSize: '11px', color: '#9ca3af' }}>
+                                {formatTime(message.created_at)}
+                              </span>
+                            </div>
+                            
+                            <div style={{
+                              padding: '10px 14px',
+                              borderRadius: '16px',
+                              wordBreak: 'break-word',
+                              whiteSpace: 'pre-wrap',
+                              backgroundColor: isOwnMessage ? '#3b82f6' : 'rgba(255, 255, 255, 0.1)',
+                              color: 'white',
+                              borderBottomRightRadius: isOwnMessage ? '6px' : '16px',
+                              borderBottomLeftRadius: isOwnMessage ? '16px' : '6px',
+                            }}>
+                              {message.content}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
                     return null;
                   }
 
-                  const isOwnMessage = user && message.user && message.user.id === user.id;
+                  const isOwnMessage = user && messageUser && messageUser.id === user.id;
 
                   return (
                     <div 
@@ -376,7 +505,7 @@ const ChatInterface = ({ projectId }) => {
                         marginBottom: '16px',
                         display: 'flex',
                         flexDirection: 'column',
-                        alignItems: isOwnMessage ? 'flex-end' : 'flex-start', // This properly aligns the entire message
+                        alignItems: isOwnMessage ? 'flex-end' : 'flex-start',
                         width: '100%'
                       }}
                       onMouseEnter={(e) => {
@@ -388,7 +517,7 @@ const ChatInterface = ({ projectId }) => {
                         if (actions) actions.style.opacity = '0';
                       }}
                     >
-                      {/* Reply indicator - now properly handles backend data */}
+                      {/* Reply indicator */}
                       {message.reply_to && (
                         <div style={{ 
                           marginBottom: '8px',
@@ -409,223 +538,182 @@ const ChatInterface = ({ projectId }) => {
                             alignItems: 'center',
                             gap: '4px'
                           }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M3 10h10a8 8 0 0 1 8 8v2M3 10l6 6M3 10l6-6"/>
-                            </svg>
-                            {isOwnMessage ? 'You replied to' : 'Replying to'} {
-                              message.reply_to.user 
-                                ? getUserDisplayName(message.reply_to.user) 
-                                : (message.reply_to.username || message.reply_to.full_name || 'someone')
-                            }
+                            <Reply size={14} />
+                            {isOwnMessage ? 'You' : getUserDisplayName(messageUser)} replied to {getUserDisplayName(message.reply_to.user || message.reply_to.users)}
                           </div>
-                          {(message.reply_to.content || message.reply_to.message) && (
-                            <div style={{ 
-                              fontStyle: 'italic',
-                              opacity: 0.8,
-                              borderLeft: '2px solid rgba(59, 130, 246, 0.4)',
-                              paddingLeft: '8px',
-                              marginLeft: '2px',
-                              fontSize: '11px',
-                              maxHeight: '60px',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis'
-                            }}>
-                              "{message.reply_to.content || message.reply_to.message}"
-                            </div>
-                          )}
+                          <div style={{ opacity: 0.8 }}>
+                            {message.reply_to.content}
+                          </div>
                         </div>
                       )}
-                      
-                      <div style={{
-                        display: 'flex',
-                        gap: '8px',
-                        flexDirection: isOwnMessage ? 'row-reverse' : 'row',
-                        alignItems: 'flex-end',
-                        maxWidth: '70%' // Limit message width for better readability
+
+                      {/* Message bubble */}
+                      <div style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        gap: '4px', 
+                        maxWidth: '70%',
+                        alignItems: isOwnMessage ? 'flex-end' : 'flex-start'
                       }}>
-                        {/* Avatar */}
                         <div style={{ 
-                          width: '32px', 
-                          height: '32px', 
-                          borderRadius: '50%', 
-                          backgroundColor: '#3b82f6', 
                           display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center',
-                          color: 'white',
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          flexShrink: 0,
-                          alignSelf: 'flex-end'
+                          gap: '8px', 
+                          alignItems: 'center',
+                          justifyContent: isOwnMessage ? 'flex-end' : 'flex-start'
                         }}>
-                          {getUserInitial(message.user)}
+                          <span style={{ fontSize: '13px', fontWeight: '600', color: '#d1d5db' }}>
+                            {isOwnMessage ? 'You' : getUserDisplayName(messageUser)}
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#9ca3af' }}>
+                            {formatTime(message.created_at)}
+                          </span>
+                          {message.is_edited && (
+                            <span style={{ fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>(edited)</span>
+                          )}
                         </div>
                         
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '8px', 
-                            marginBottom: '4px',
-                            justifyContent: isOwnMessage ? 'flex-end' : 'flex-start'
+                        <div style={{ position: 'relative', display: 'flex', justifyContent: isOwnMessage ? 'flex-end' : 'flex-start' }}>
+                          <div style={{
+                            padding: '10px 14px',
+                            borderRadius: '16px',
+                            wordBreak: 'break-word',
+                            whiteSpace: 'pre-wrap',
+                            backgroundColor: isOwnMessage ? '#3b82f6' : 'rgba(255, 255, 255, 0.1)',
+                            color: 'white',
+                            borderBottomRightRadius: isOwnMessage ? '6px' : '16px',
+                            borderBottomLeftRadius: isOwnMessage ? '16px' : '6px',
+                            width: 'fit-content',
+                            maxWidth: '100%'
                           }}>
-                            <span style={{ fontSize: '13px', fontWeight: '600', color: '#d1d5db' }}>
-                              {isOwnMessage ? 'You' : getUserDisplayName(message.user)}
-                            </span>
-                            <span style={{ fontSize: '11px', color: '#9ca3af' }}>
-                              {formatTime(message.created_at)}
-                            </span>
-                            {message.is_edited && (
-                              <span style={{ fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>(edited)</span>
-                            )}
+                            {message.content || 'Message content unavailable'}
                           </div>
                           
-                          <div style={{ position: 'relative', display: 'flex', justifyContent: isOwnMessage ? 'flex-end' : 'flex-start' }}>
-                            <div style={{
-                              padding: '10px 14px',
-                              borderRadius: '16px',
-                              wordBreak: 'break-word',
-                              whiteSpace: 'pre-wrap',
-                              backgroundColor: isOwnMessage ? '#3b82f6' : 'rgba(255, 255, 255, 0.1)',
-                              color: 'white',
-                              borderBottomRightRadius: isOwnMessage ? '6px' : '16px',
-                              borderBottomLeftRadius: isOwnMessage ? '16px' : '6px',
-                              width: 'fit-content',
-                              maxWidth: '100%'
-                            }}>
-                              {message.content || 'Message content unavailable'}
-                            </div>
-                            
-                            {/* Message Actions */}
+                          {/* Message Actions */}
+                          {isOwnMessage && (
                             <div 
                               className="message-actions" 
                               style={{
                                 position: 'absolute',
                                 top: '50%',
                                 transform: 'translateY(-50%)',
-                                [isOwnMessage ? 'left' : 'right']: '-80px',
+                                right: '-100px',
                                 display: 'flex',
-                                gap: '4px',
+                                gap: '8px',
                                 opacity: 0,
-                                transition: 'opacity 0.2s ease',
-                                background: 'rgba(26, 28, 32, 0.95)',
-                                borderRadius: '8px',
-                                padding: '4px',
-                                border: '1px solid rgba(255, 255, 255, 0.1)'
+                                transition: 'opacity 0.2s ease'
+                              }}
+                            >
+                              <button
+                                onClick={() => {
+                                  setEditingMessage(message);
+                                  setMessageInput(message.content);
+                                  messageInputRef.current?.focus();
+                                }}
+                                style={{
+                                  background: 'rgba(255, 255, 255, 0.1)',
+                                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                                  color: '#9ca3af',
+                                  padding: '8px',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center'
+                                }}
+                              >
+                                <Edit3 size={16} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (window.confirm('Delete this message?')) {
+                                    deleteMessage(message.id);
+                                  }
+                                }}
+                                style={{
+                                  background: 'rgba(239, 68, 68, 0.1)',
+                                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                                  color: '#ef4444',
+                                  padding: '8px',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center'
+                                }}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Reply button for all messages */}
+                          {!isOwnMessage && (
+                            <div 
+                              className="message-actions" 
+                              style={{
+                                position: 'absolute',
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                left: '-80px',
+                                opacity: 0,
+                                transition: 'opacity 0.2s ease'
                               }}
                             >
                               <button
                                 onClick={() => setReplyingTo(message)}
-                                title="Reply"
                                 style={{
-                                  background: 'transparent',
-                                  border: 'none',
+                                  background: 'rgba(255, 255, 255, 0.1)',
+                                  border: '1px solid rgba(255, 255, 255, 0.2)',
                                   color: '#9ca3af',
+                                  padding: '8px',
+                                  borderRadius: '8px',
                                   cursor: 'pointer',
-                                  padding: '6px',
-                                  borderRadius: '6px',
-                                  fontSize: '14px',
-                                  transition: 'all 0.2s ease'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-                                  e.target.style.color = 'white';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.target.style.backgroundColor = 'transparent';
-                                  e.target.style.color = '#9ca3af';
+                                  display: 'flex',
+                                  alignItems: 'center'
                                 }}
                               >
-                                <Reply size={14} />
+                                <Reply size={16} />
                               </button>
-                              
-                              {isOwnMessage && (
-                                <>
-                                  <button
-                                    onClick={() => {
-                                      setEditingMessage(message);
-                                      setMessageInput(message.content || '');
-                                      messageInputRef.current?.focus();
-                                    }}
-                                    title="Edit"
-                                    style={{
-                                      background: 'transparent',
-                                      border: 'none',
-                                      color: '#9ca3af',
-                                      cursor: 'pointer',
-                                      padding: '6px',
-                                      borderRadius: '6px',
-                                      fontSize: '14px',
-                                      transition: 'all 0.2s ease'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-                                      e.target.style.color = 'white';
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.target.style.backgroundColor = 'transparent';
-                                      e.target.style.color = '#9ca3af';
-                                    }}
-                                  >
-                                    <Edit3 size={14} />
-                                  </button>
-                                  <button
-                                    onClick={() => deleteMessage(message.id)}
-                                    title="Delete"
-                                    style={{
-                                      background: 'transparent',
-                                      border: 'none',
-                                      color: '#9ca3af',
-                                      cursor: 'pointer',
-                                      padding: '6px',
-                                      borderRadius: '6px',
-                                      fontSize: '14px',
-                                      transition: 'all 0.2s ease'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      e.target.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
-                                      e.target.style.color = '#ef4444';
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.target.style.backgroundColor = 'transparent';
-                                      e.target.style.color = '#9ca3af';
-                                    }}
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </>
-                              )}
                             </div>
-                          </div>
+                          )}
                         </div>
                       </div>
                     </div>
                   );
                 })}
-                
-                {/* Typing Indicators */}
+
+                {/* Typing Indicator */}
                 {Object.keys(currentTypingUsers).length > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: '#9ca3af' }}>
-                    <div style={{ display: 'flex', gap: '4px' }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '8px', 
+                    color: '#9ca3af', 
+                    fontSize: '14px', 
+                    padding: '8px 0',
+                    fontStyle: 'italic'
+                  }}>
+                    <div style={{ 
+                      display: 'flex', 
+                      gap: '4px' 
+                    }}>
                       <div style={{ 
                         width: '6px', 
                         height: '6px', 
-                        backgroundColor: '#9ca3af', 
                         borderRadius: '50%', 
+                        backgroundColor: '#9ca3af',
                         animation: 'bounce 1.4s infinite ease-in-out'
                       }}></div>
                       <div style={{ 
                         width: '6px', 
                         height: '6px', 
-                        backgroundColor: '#9ca3af', 
                         borderRadius: '50%', 
+                        backgroundColor: '#9ca3af',
                         animation: 'bounce 1.4s infinite ease-in-out 0.2s'
                       }}></div>
                       <div style={{ 
                         width: '6px', 
                         height: '6px', 
-                        backgroundColor: '#9ca3af', 
                         borderRadius: '50%', 
+                        backgroundColor: '#9ca3af',
                         animation: 'bounce 1.4s infinite ease-in-out 0.4s'
                       }}></div>
                     </div>
@@ -733,216 +821,170 @@ const ChatInterface = ({ projectId }) => {
 
             {/* Message Input */}
             <div style={{ 
-              padding: '20px', 
-              borderTop: '1px solid rgba(255, 255, 255, 0.1)', 
-              background: 'rgba(26, 28, 32, 0.95)',
-              backdropFilter: 'blur(20px)',
-              flexShrink: 0
+              padding: '20px',
+              borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+              backgroundColor: 'rgba(26, 28, 32, 0.95)',
+              backdropFilter: 'blur(20px)'
             }}>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px' }}>
-                <div style={{ flex: 1, position: 'relative' }}>
-                  <textarea
-                    ref={messageInputRef}
-                    value={messageInput}
-                    onChange={handleInputChange}
-                    onKeyPress={handleKeyPress}
-                    placeholder={
-                      editingMessage 
-                        ? 'Edit your message...' 
-                        : `Message #${activeRoomData.name}`
-                    }
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      borderRadius: '12px',
-                      resize: 'none',
-                      minHeight: '44px',
-                      maxHeight: '120px',
-                      fontFamily: 'inherit',
-                      fontSize: '14px',
-                      lineHeight: '1.5',
-                      boxSizing: 'border-box',
-                      outline: 'none',
-                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                      color: 'white',
-                      backdropFilter: 'blur(8px)'
-                    }}
-                    rows="1"
-                  />
-                </div>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+                <textarea
+                  ref={messageInputRef}
+                  value={messageInput}
+                  onChange={handleInputChange}
+                  onKeyPress={handleKeyPress}
+                  placeholder={`Message #${activeRoomData.name}`}
+                  disabled={!connected}
+                  style={{
+                    flex: 1,
+                    padding: '12px 16px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    color: 'white',
+                    fontSize: '14px',
+                    resize: 'none',
+                    minHeight: '44px',
+                    maxHeight: '120px',
+                    fontFamily: 'inherit',
+                    outline: 'none'
+                  }}
+                  rows={1}
+                />
                 <button
                   onClick={handleSendMessage}
-                  disabled={!messageInput.trim()}
+                  disabled={!messageInput.trim() || !connected}
                   style={{
                     padding: '12px',
                     borderRadius: '12px',
                     border: 'none',
-                    cursor: messageInput.trim() ? 'pointer' : 'not-allowed',
-                    backgroundColor: messageInput.trim() ? '#3b82f6' : 'rgba(255, 255, 255, 0.1)',
-                    color: messageInput.trim() ? 'white' : '#9ca3af',
-                    minHeight: '44px',
-                    minWidth: '44px',
+                    backgroundColor: messageInput.trim() && connected ? '#3b82f6' : 'rgba(255, 255, 255, 0.1)',
+                    color: messageInput.trim() && connected ? 'white' : '#6b7280',
+                    cursor: messageInput.trim() && connected ? 'pointer' : 'not-allowed',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    flexShrink: 0,
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (messageInput.trim()) {
-                      e.target.style.backgroundColor = '#2563eb';
-                      e.target.style.transform = 'translateY(-1px)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (messageInput.trim()) {
-                      e.target.style.backgroundColor = '#3b82f6';
-                      e.target.style.transform = 'translateY(0)';
-                    }
+                    transition: 'all 0.3s ease',
+                    minWidth: '44px',
+                    height: '44px'
                   }}
                 >
-                  <Send size={18} />
+                  <Send size={20} />
                 </button>
               </div>
             </div>
           </>
         ) : (
-          /* No Room Selected */
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0F1116' }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '48px', marginBottom: '16px', color: '#3b82f6' }}>#</div>
-              <h3 style={{ fontSize: '18px', fontWeight: '500', color: 'white', marginBottom: '8px' }}>Welcome to Project Chat</h3>
-              <p style={{ color: '#9ca3af', marginBottom: '16px' }}>
-                {chatRooms.length > 0 
-                  ? 'Select a chat room to start messaging with your project team'
-                  : 'Create your first chat room to get started'
-                }
-              </p>
-              {chatRooms.length === 0 && (
-                <button
-                  onClick={() => setShowCreateRoom(true)}
-                  style={{ 
-                    padding: '10px 20px', 
-                    backgroundColor: '#3b82f6', 
-                    color: 'white', 
-                    borderRadius: '8px', 
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: '500'
-                  }}
-                >
-                  Create Chat Room
-                </button>
-              )}
-            </div>
+          <div style={{ 
+            flex: 1, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            color: '#9ca3af',
+            fontSize: '16px'
+          }}>
+            Select a chat room to start messaging
           </div>
         )}
       </div>
 
       {/* Create Room Modal */}
       {showCreateRoom && (
-        <div style={{ 
-          position: 'fixed', 
-          top: 0, 
-          left: 0, 
-          right: 0, 
-          bottom: 0, 
-          backgroundColor: 'rgba(0, 0, 0, 0.8)', 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 50 
+          zIndex: 1000
         }}>
-          <div style={{ 
-            backgroundColor: '#1a1c20', 
-            borderRadius: '12px', 
-            padding: '24px', 
-            width: '100%', 
-            maxWidth: '448px',
-            margin: '16px',
+          <div style={{
+            backgroundColor: '#1a1c20',
+            borderRadius: '16px',
+            padding: '24px',
+            width: '90%',
+            maxWidth: '500px',
             border: '1px solid rgba(255, 255, 255, 0.1)'
           }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', margin: '0 0 16px 0', color: 'white' }}>
-              Create New Chat Room
+            <h3 style={{ fontSize: '20px', fontWeight: '700', color: 'white', marginBottom: '20px' }}>
+              Create New Room
             </h3>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '4px' }}>
-                  Room Name *
-                </label>
-                <input
-                  type="text"
-                  value={newRoomName}
-                  onChange={(e) => setNewRoomName(e.target.value)}
-                  style={{ 
-                    width: '100%', 
-                    padding: '8px 12px', 
-                    border: '1px solid rgba(255, 255, 255, 0.2)', 
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    boxSizing: 'border-box',
-                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                    color: 'white'
-                  }}
-                  placeholder="e.g., General Discussion"
-                  maxLength="50"
-                />
-              </div>
-              
-              <div>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '4px' }}>
-                  Description
-                </label>
-                <textarea
-                  value={newRoomDescription}
-                  onChange={(e) => setNewRoomDescription(e.target.value)}
-                  style={{ 
-                    width: '100%', 
-                    padding: '8px 12px', 
-                    border: '1px solid rgba(255, 255, 255, 0.2)', 
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    resize: 'vertical',
-                    minHeight: '80px',
-                    boxSizing: 'border-box',
-                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                    color: 'white'
-                  }}
-                  placeholder="Optional description for the room..."
-                  maxLength="200"
-                />
-              </div>
-              
-              <div>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '4px' }}>
-                  Room Type
-                </label>
-                <select
-                  value={newRoomType}
-                  onChange={(e) => setNewRoomType(e.target.value)}
-                  style={{ 
-                    width: '100%', 
-                    padding: '8px 12px', 
-                    border: '1px solid rgba(255, 255, 255, 0.2)', 
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    boxSizing: 'border-box',
-                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                    color: 'white'
-                  }}
-                >
-                  <option value="general">General</option>
-                  <option value="development">Development</option>
-                  <option value="announcements">Announcements</option>
-                  <option value="random">Random</option>
-                </select>
-              </div>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '14px', color: '#d1d5db', marginBottom: '8px' }}>
+                Room Name *
+              </label>
+              <input
+                type="text"
+                value={newRoomName}
+                onChange={(e) => setNewRoomName(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  color: 'white',
+                  fontSize: '14px',
+                  outline: 'none'
+                }}
+                placeholder="e.g., general, development, announcements"
+              />
             </div>
-            
-            <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '14px', color: '#d1d5db', marginBottom: '8px' }}>
+                Description
+              </label>
+              <textarea
+                value={newRoomDescription}
+                onChange={(e) => setNewRoomDescription(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  color: 'white',
+                  fontSize: '14px',
+                  minHeight: '80px',
+                  resize: 'vertical',
+                  outline: 'none',
+                  fontFamily: 'inherit'
+                }}
+                placeholder="Brief description of this room's purpose"
+              />
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', fontSize: '14px', color: '#d1d5db', marginBottom: '8px' }}>
+                Room Type
+              </label>
+              <select
+                value={newRoomType}
+                onChange={(e) => setNewRoomType(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  color: 'white',
+                  fontSize: '14px',
+                  outline: 'none'
+                }}
+              >
+                <option value="general">General</option>
+                <option value="development">Development</option>
+                <option value="announcements">Announcements</option>
+                <option value="random">Random</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button
                 onClick={() => {
                   setShowCreateRoom(false);
@@ -950,13 +992,12 @@ const ChatInterface = ({ projectId }) => {
                   setNewRoomDescription('');
                   setNewRoomType('general');
                 }}
-                style={{ 
-                  flex: 1, 
-                  padding: '10px 16px', 
-                  color: '#d1d5db', 
-                  backgroundColor: 'rgba(255, 255, 255, 0.1)', 
+                style={{
+                  padding: '10px 20px',
                   borderRadius: '8px',
-                  border: 'none',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  color: '#d1d5db',
                   cursor: 'pointer',
                   fontSize: '14px',
                   fontWeight: '500'
@@ -966,15 +1007,13 @@ const ChatInterface = ({ projectId }) => {
               </button>
               <button
                 onClick={handleCreateRoom}
-                disabled={!newRoomName.trim()}
-                style={{ 
-                  flex: 1, 
-                  padding: '10px 16px', 
+                style={{
+                  padding: '10px 20px',
                   borderRadius: '8px',
                   border: 'none',
-                  cursor: newRoomName.trim() ? 'pointer' : 'not-allowed',
-                  backgroundColor: newRoomName.trim() ? '#3b82f6' : 'rgba(255, 255, 255, 0.1)',
-                  color: newRoomName.trim() ? 'white' : '#9ca3af',
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  cursor: 'pointer',
                   fontSize: '14px',
                   fontWeight: '500'
                 }}
@@ -985,43 +1024,6 @@ const ChatInterface = ({ projectId }) => {
           </div>
         </div>
       )}
-      
-      {/* CSS animations */}
-      <style>{`
-        @keyframes globalLogoRotate {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        
-        .global-loading-spinner {
-          animation: globalLogoRotate 2s linear infinite;
-        }
-        
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        @keyframes bounce {
-          0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
-          40% { transform: translateY(-10px); }
-          60% { transform: translateY(-5px); }
-        }
-        
-        /* Custom scrollbar for webkit browsers */
-        ::-webkit-scrollbar {
-          width: 6px;
-        }
-        ::-webkit-scrollbar-track {
-          background: rgba(255, 255, 255, 0.1);
-        }
-        ::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.3);
-          border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.5);
-        }
-      `}</style>
     </div>
   );
 };
