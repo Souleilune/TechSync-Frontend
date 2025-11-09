@@ -48,9 +48,20 @@ export const ChatProvider = ({ children }) => {
         setConnected(false);
       });
 
-      // Handle new messages
+      // Handle new messages FROM OTHER USERS
       socketInstance.on('new_message', (data) => {
         const { message, roomId } = data;
+        console.log('📩 Received new_message from another user:', { roomId, messageId: message.id });
+        setMessages(prev => ({
+          ...prev,
+          [roomId]: [...(prev[roomId] || []), message]
+        }));
+      });
+
+      // ✅ FIX: Handle message_sent confirmation FOR SENDER'S OWN MESSAGE
+      socketInstance.on('message_sent', (data) => {
+        const { message, roomId } = data;
+        console.log('✅ Received message_sent confirmation (own message):', { roomId, messageId: message.id });
         setMessages(prev => ({
           ...prev,
           [roomId]: [...(prev[roomId] || []), message]
@@ -145,6 +156,7 @@ export const ChatProvider = ({ children }) => {
   // Send message (only to project members)
   const sendMessage = useCallback((roomId, content, messageType = 'text', replyToMessageId = null) => {
     if (socket && connected && currentProject) {
+      console.log('📤 Sending message:', { roomId, content: content.substring(0, 50) });
       socket.emit('send_message', {
         roomId,
         projectId: currentProject,
