@@ -1285,7 +1285,7 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
                       }
                     }}
                   >
-                    🚀 Start Challenge
+                    Start Challenge
                   </button>
                 </>
               )}
