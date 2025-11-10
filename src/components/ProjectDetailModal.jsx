@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Users, Clock, TrendingUp, Code, Target, Calendar, Lock, Sparkles, User } from 'lucide-react';
 import api from '../services/api';
+import ExpandableMatchSummary from './ExpandableMatchSummary';
 
 const ProjectDetailModal = ({ project, isOpen, onClose, onJoin, isLocked }) => {
   const [isJoining, setIsJoining] = useState(false);
