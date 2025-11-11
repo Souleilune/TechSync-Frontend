@@ -56,6 +56,11 @@ export const authService = {
     return response.data;
   },
 
+  checkUsername: async (username) => {
+    const response = await api.get(`/auth/check-username?username=${encodeURIComponent(username)}`);
+    return response.data;
+  },
+
   // Logout (clear token)
   logout: () => {
     setAuthToken(null);
