@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { taskService } from '../../services/taskService';
 import { projectService } from '../../services/projectService';
-import { PanelLeft } from 'lucide-react';
+import { PanelLeft, List, Kanban } from 'lucide-react';
 
 // Background symbols component - WITH FLOATING ANIMATIONS
 const BackgroundSymbols = () => (
@@ -407,6 +407,7 @@ function ProjectTasks() {
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState('desc');
   const [showSuccess, setShowSuccess] = useState(null);
+  const [viewMode, setViewMode] = useState('list'); // 'list' or 'kanban'
 
   // NEW STATE: Track sidebar collapsed state
   // This stores whether the sidebar is currently collapsed (true) or expanded (false)
@@ -772,6 +773,185 @@ function ProjectTasks() {
     
     return assignableMembers;
   };
+
+
+
+// Kanban View Component
+const KanbanView = () => {
+  const todoTasks = filteredTasks.filter(t => t.status === 'todo');
+  const inProgressTasks = filteredTasks.filter(t => t.status === 'in_progress');
+  const inReviewTasks = filteredTasks.filter(t => t.status === 'in_review');
+  const completedTasks = filteredTasks.filter(t => t.status === 'completed');
+  const blockedTasks = filteredTasks.filter(t => t.status === 'blocked');
+
+  const KanbanColumn = ({ title, tasks: columnTasks, status }) => (
+    <div style={{
+      background: 'linear-gradient(135deg, rgba(26, 28, 32, 0.95), rgba(15, 17, 22, 0.90))',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      borderRadius: '12px',
+      padding: '16px',
+      backdropFilter: 'blur(20px)',
+      minHeight: '500px'
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '16px'
+      }}>
+        <h3 style={{
+          fontSize: '18px',
+          fontWeight: '600',
+          color: 'white',
+          margin: 0
+        }}>{title}</h3>
+        <span style={{
+          backgroundColor: 'rgba(255, 255, 255, 0.1)',
+          color: '#9ca3af',
+          padding: '4px 12px',
+          borderRadius: '12px',
+          fontSize: '13px',
+          fontWeight: '500'
+        }}>{columnTasks.length}</span>
+      </div>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px'
+      }}>
+        {columnTasks.length === 0 ? (
+          <div style={{
+            textAlign: 'center',
+            padding: '32px 16px',
+            color: '#6b7280',
+            fontSize: '14px'
+          }}>
+            No {status} tasks
+          </div>
+        ) : (
+          columnTasks.map((task) => (
+            <div
+              key={task.id}
+              style={styles.taskCard}
+              onClick={(e) => {
+                e.stopPropagation();
+                viewTaskDetail(task.id);
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.2)';
+              }}
+            >
+              <div style={styles.taskHeader}>
+                <h3 style={styles.taskTitle}>{task.title}</h3>
+              </div>
+
+              <div style={styles.taskMeta}>
+                <span
+                  style={{
+                    ...styles.statusBadge,
+                    backgroundColor: getStatusColor(task.status),
+                    color: getStatusTextColor(task.status)
+                  }}
+                >
+                  {task.status.replace('_', ' ')}
+                </span>
+                <span
+                  style={{
+                    ...styles.priorityBadge,
+                    backgroundColor: getPriorityColor(task.priority)
+                  }}
+                >
+                  {task.priority}
+                </span>
+              </div>
+
+              {task.description && (
+                <p style={styles.taskDescription}>
+                  {task.description.length > 100
+                    ? task.description.substring(0, 100) + '...'
+                    : task.description
+                  }
+                </p>
+              )}
+
+              <div style={styles.taskFooter}>
+                <div style={styles.taskInfo}>
+                  <div>Due: {formatDate(task.due_date)}</div>
+                  <div>Assigned: {getMemberName(task.assigned_to)}</div>
+                </div>
+                
+                <div style={styles.taskActions}>
+                  <button
+                    style={styles.viewButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      viewTaskDetail(task.id);
+                    }}
+                    onMouseEnter={(e) => e.target.style.transform = 'translateY(-1px)'}
+                    onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+                  >
+                    View
+                  </button>
+                  
+                  {canCreateTasks && (
+                    <>
+                      <button
+                        style={styles.editButton}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          editTask(task);
+                        }}
+                        onMouseEnter={(e) => e.target.style.transform = 'translateY(-1px)'}
+                        onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        style={styles.deleteButton}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteTask(task.id);
+                        }}
+                        onMouseEnter={(e) => e.target.style.transform = 'translateY(-1px)'}
+                        onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{
+      position: 'relative',
+      zIndex: 10,
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+      gap: '20px',
+      marginBottom: '30px'
+    }}>
+      <KanbanColumn title="To Do" tasks={todoTasks} status="todo" />
+      <KanbanColumn title="In Progress" tasks={inProgressTasks} status="in progress" />
+      <KanbanColumn title="In Review" tasks={inReviewTasks} status="in review" />
+      <KanbanColumn title="Completed" tasks={completedTasks} status="completed" />
+      {blockedTasks.length > 0 && (
+        <KanbanColumn title="Blocked" tasks={blockedTasks} status="blocked" />
+      )}
+    </div>
+  );
+};
 
   const getStatusColor = (status) => {
     const colors = {
@@ -1320,7 +1500,56 @@ function ProjectTasks() {
             <p style={styles.subtitle}>
               {project ? `${project.title} - Task Management` : 'Manage and track project tasks'}
             </p>
-          </div>
+      </div>
+      
+      {/* View Mode Toggle */}
+      <div style={{
+        display: 'flex',
+        gap: '8px',
+        alignItems: 'center',
+        marginRight: 'auto',
+        marginLeft: '20px'
+      }}>
+        <button
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            padding: '8px 16px',
+            backgroundColor: viewMode === 'list' ? '#3b82f6' : 'rgba(26, 28, 32, 0.95)',
+            color: viewMode === 'list' ? 'white' : '#9ca3af',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: '500',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+          onClick={() => setViewMode('list')}
+        >
+          <List size={16} style={{ marginRight: '6px' }} />
+          List
+        </button>
+        <button
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            padding: '8px 16px',
+            backgroundColor: viewMode === 'kanban' ? '#3b82f6' : 'rgba(26, 28, 32, 0.95)',
+            color: viewMode === 'kanban' ? 'white' : '#9ca3af',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: '500',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+          onClick={() => setViewMode('kanban')}
+        >
+          <Kanban size={16} style={{ marginRight: '6px' }} />
+          Kanban
+        </button>
+      </div>
+      
           <div style={styles.headerRight}>
             {canCreateTasks && (
               <button
@@ -1423,6 +1652,8 @@ function ProjectTasks() {
               </button>
             )}
           </div>
+        ) : viewMode === 'kanban' ? (
+          <KanbanView />
         ) : (
           <div style={styles.tasksGrid}>
             {filteredTasks.map((task) => (
@@ -1520,6 +1751,7 @@ function ProjectTasks() {
                 </div>
               </div>
             ))}
+          
           </div>
         )}
 
