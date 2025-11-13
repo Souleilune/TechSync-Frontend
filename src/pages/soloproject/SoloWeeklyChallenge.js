@@ -573,7 +573,6 @@ useEffect(() => {
       const attemptData = {
         challenge_id: currentChallenge.id,
         submitted_code: submission.code,
-        notes: submission.description,
         language: submission.language,
         project_id: projectId,
         attempt_type: 'solo_weekly'
@@ -1655,26 +1654,7 @@ if (loading) {
                     />
                   </div>
 
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>
-                      Description (Optional)
-                    </label>
-                    <textarea
-                      value={submission.description}
-                      onChange={(e) => setSubmission(prev => ({ ...prev, description: e.target.value }))}
-                      placeholder="Describe your approach or any notes about your solution..."
-                      rows={3}
-                      style={styles.descriptionTextarea}
-                      onFocus={(e) => {
-                        e.target.style.borderColor = '#a855f7';
-                        e.target.style.boxShadow = '0 0 0 3px rgba(168, 85, 247, 0.1)';
-                      }}
-                      onBlur={(e) => {
-                        e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                        e.target.style.boxShadow = 'none';
-                      }}
-                    />
-                  </div>
+
 
                   <div style={styles.buttonGroup}>
                     <button
