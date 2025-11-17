@@ -1243,7 +1243,7 @@ function ProjectFiles() {
               <div style={styles.repositorySection}>
                 <div style={styles.repositoryHeader}>
                   <div style={styles.repositoryInfo}>
-                    <span style={styles.repositoryName}>📚 {projectRepository.repository_full_name}</span>
+                    <span style={styles.repositoryName}>{projectRepository.repository_full_name}</span>
                     {branches.length > 0 && error !== 'access_denied' && (
                       <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
                         <GitBranch size={16} style={{ position: 'absolute', left: '12px', pointerEvents: 'none', color: '#9ca3af', zIndex: 1 }} />
