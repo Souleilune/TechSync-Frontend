@@ -1,15 +1,43 @@
-// frontend/src/pages/soloproject/SoloProjectDashboard.js - WITH SIDEBAR TOGGLE
+// frontend/src/pages/soloproject/SoloProjectDashboard.js - ENHANCED WITH CHART.JS ANALYTICS
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import SoloProjectService from '../../services/soloProjectService';
 import { taskService } from '../../services/taskService';
-import { BarChart3, Target, Clock, TrendingUp, Plus, StickyNote, FileText, Award, Trophy, RefreshCw, PanelLeft } from 'lucide-react';
+import { BarChart3, Target, Clock, TrendingUp, Plus, StickyNote, FileText, Award, Trophy, RefreshCw, PanelLeft, Zap } from 'lucide-react';
 import AwardsDisplay from '../../components/AwardsDisplay';
 import TimelinePublisher from '../../components/TimelinePublisher';
 import TimelinePublishingService from '../../services/timelinePublishingService';
 
-// Background symbols component - WITH FLOATING ANIMATIONS
+// NEW: Chart.js imports
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
+import { Bar, Doughnut, Line } from 'react-chartjs-2';
+
+// NEW: Register Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend
+);
+
+// Background symbols component - WITH FLOATING ANIMATIONS (UNCHANGED)
 const BackgroundSymbols = () => (
   <>
     {/* Floating Animation CSS */}
@@ -193,13 +221,24 @@ function SoloProjectDashboard() {
   const [timelineRefreshTrigger, setTimelineRefreshTrigger] = useState(0);
   const [previousCompletionRate, setPreviousCompletionRate] = useState(0);
 
-  // NEW STATE: Track sidebar collapsed state
+  // NEW: Chart data states
+  const [challengePerformanceData, setChallengePerformanceData] = useState(null);
+  const [goalDistributionData, setGoalDistributionData] = useState(null);
+  const [progressTimelineData, setProgressTimelineData] = useState(null);
+  const [challengeStats, setChallengeStats] = useState({
+    totalChallenges: 0,
+    completedChallenges: 0,
+    averageScore: 0,
+    totalPoints: 0
+  });
+
+  // Track sidebar collapsed state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem('soloProjectSidebarCollapsed');
     return saved === 'true';
   });
 
-  // NEW: Function to toggle sidebar
+  // Function to toggle sidebar
   const toggleSidebar = () => {
     const newCollapsedState = !isSidebarCollapsed;
     setIsSidebarCollapsed(newCollapsedState);
@@ -210,7 +249,7 @@ function SoloProjectDashboard() {
     }));
   };
 
-  // NEW: Sync with sidebar toggle events
+  // Sync with sidebar toggle events
   useEffect(() => {
     const handleSidebarToggle = (event) => {
       setIsSidebarCollapsed(event.detail.collapsed);
@@ -219,6 +258,139 @@ function SoloProjectDashboard() {
     window.addEventListener('soloProjectSidebarToggle', handleSidebarToggle);
     return () => window.removeEventListener('soloProjectSidebarToggle', handleSidebarToggle);
   }, []);
+
+  // NEW: Fetch challenge attempts for charts
+  const fetchChallengeData = useCallback(async () => {
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${apiUrl}/challenges/attempts/${projectId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const attempts = data.attempts || [];
+        
+        // Filter only passed attempts
+        const passedAttempts = attempts.filter(a => a.status === 'passed');
+        
+        // Calculate statistics
+        const totalCompleted = passedAttempts.length;
+        const totalScore = passedAttempts.reduce((sum, a) => sum + (a.score || 0), 0);
+        const avgScore = totalCompleted > 0 ? Math.round(totalScore / totalCompleted) : 0;
+        
+        setChallengeStats({
+          totalChallenges: attempts.length,
+          completedChallenges: totalCompleted,
+          averageScore: avgScore,
+          totalPoints: totalScore
+        });
+
+        // Prepare chart data - last 7 challenges
+        const recentAttempts = passedAttempts.slice(-7).reverse();
+        
+        if (recentAttempts.length > 0) {
+          setChallengePerformanceData({
+            labels: recentAttempts.map((_, idx) => `Challenge ${recentAttempts.length - idx}`),
+            datasets: [{
+              label: 'Challenge Score',
+              data: recentAttempts.map(a => a.score || 0),
+              backgroundColor: recentAttempts.map(a => 
+                (a.score || 0) >= 8 ? 'rgba(16, 185, 129, 0.8)' : 
+                (a.score || 0) >= 6 ? 'rgba(251, 191, 36, 0.8)' : 
+                'rgba(239, 68, 68, 0.8)'
+              ),
+              borderColor: recentAttempts.map(a => 
+                (a.score || 0) >= 8 ? 'rgba(16, 185, 129, 1)' : 
+                (a.score || 0) >= 6 ? 'rgba(251, 191, 36, 1)' : 
+                'rgba(239, 68, 68, 1)'
+              ),
+              borderWidth: 2
+            }]
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching challenge data:', error);
+    }
+  }, [projectId]);
+
+  // NEW: Prepare goal distribution chart
+  const prepareGoalDistribution = useCallback(async () => {
+    try {
+      const response = await SoloProjectService.getGoals(projectId);
+      
+      if (response.success) {
+        const goals = response.data.goals || [];
+        
+        const statusCounts = {
+          completed: goals.filter(g => g.status === 'completed').length,
+          in_progress: goals.filter(g => g.status === 'in_progress').length,
+          todo: goals.filter(g => g.status === 'todo' || g.status === 'active').length
+        };
+
+        setGoalDistributionData({
+          labels: ['Completed', 'In Progress', 'To Do'],
+          datasets: [{
+            data: [statusCounts.completed, statusCounts.in_progress, statusCounts.todo],
+            backgroundColor: [
+              'rgba(16, 185, 129, 0.8)',
+              'rgba(59, 130, 246, 0.8)',
+              'rgba(156, 163, 175, 0.8)'
+            ],
+            borderColor: [
+              'rgba(16, 185, 129, 1)',
+              'rgba(59, 130, 246, 1)',
+              'rgba(156, 163, 175, 1)'
+            ],
+            borderWidth: 2
+          }]
+        });
+      }
+    } catch (error) {
+      console.error('Error preparing goal distribution:', error);
+    }
+  }, [projectId]);
+
+  // NEW: Prepare progress timeline (last 7 days)
+  const prepareProgressTimeline = useCallback(() => {
+    const last7Days = [];
+    const now = new Date();
+    
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      last7Days.push(date);
+    }
+
+    // For solo projects, we'll track activity count per day
+    const timelineData = last7Days.map(date => {
+      const dayActivities = recentActivity.filter(activity => {
+        const activityDate = new Date(activity.created_at);
+        return activityDate.toDateString() === date.toDateString();
+      }).length;
+
+      return dayActivities;
+    });
+
+    setProgressTimelineData({
+      labels: last7Days.map(date => 
+        date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      ),
+      datasets: [{
+        label: 'Daily Activities',
+        data: timelineData,
+        borderColor: 'rgba(168, 85, 247, 1)',
+        backgroundColor: 'rgba(168, 85, 247, 0.1)',
+        tension: 0.4,
+        fill: true,
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }]
+    });
+  }, [recentActivity]);
 
   // Check for awards
   const checkForAwards = async () => {
@@ -260,7 +432,7 @@ function SoloProjectDashboard() {
     }
   };
 
-  // Fetch dashboard data with proper syncing from solo_project_goals table
+  // Fetch dashboard data
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
@@ -273,7 +445,6 @@ function SoloProjectDashboard() {
         
         setProject(projectData);
         
-        // Use the stats directly from backend - calculated from solo_project_goals table
         setProjectStats({
           totalTasks: stats.totalTasks || 0,
           completedTasks: stats.completedTasks || 0,
@@ -286,16 +457,13 @@ function SoloProjectDashboard() {
           streakDays: stats.streakDays || 0
         });
         
-        // Set recent tasks for display
         if (recentTasks && recentTasks.length > 0) {
           setTasks(recentTasks);
         }
         
-        console.log('Dashboard synced with latest data:', {
-          totalItems: (stats.totalTasks || 0) + (stats.totalGoals || 0),
-          completedItems: (stats.completedTasks || 0) + (stats.completedGoals || 0),
-          completionRate: stats.completionRate
-        });
+        // NEW: Fetch chart data
+        await fetchChallengeData();
+        await prepareGoalDistribution();
       }
 
     } catch (error) {
@@ -304,9 +472,9 @@ function SoloProjectDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, fetchChallengeData, prepareGoalDistribution]);
 
-  // Fetch recent activity using backend API
+  // Fetch recent activity
   const fetchRecentActivity = useCallback(async () => {
     try {
       setLoadingActivity(true);
@@ -328,66 +496,66 @@ function SoloProjectDashboard() {
     fetchRecentActivity();
   }, [fetchDashboardData, fetchRecentActivity]);
 
+  // NEW: Prepare timeline chart when activity updates
+  useEffect(() => {
+    if (recentActivity.length > 0) {
+      prepareProgressTimeline();
+    }
+  }, [recentActivity, prepareProgressTimeline]);
+
   // Check awards when completion rate changes
   useEffect(() => {
-  const checkForAutoPublish = async () => {
-    // Only trigger when completion CHANGES from <100% to 100%
-    if (previousCompletionRate < 100 && projectStats.completionRate === 100) {
-      console.log('🎉 Project just reached 100%! Starting auto-publish check...');
-      
-      // Poll every 2 seconds, up to 5 times (10 seconds total)
-      let attempts = 0;
-      const maxAttempts = 5;
-      
-      const pollForPublish = async () => {
-        attempts++;
-        console.log(`🔄 Attempt ${attempts}/${maxAttempts}: Checking timeline status...`);
+    const checkForAutoPublish = async () => {
+      if (previousCompletionRate < 100 && projectStats.completionRate === 100) {
+        console.log('🎉 Project just reached 100%! Starting auto-publish check...');
         
-        try {
-          const response = await TimelinePublishingService.getTimelineStatus(projectId);
+        let attempts = 0;
+        const maxAttempts = 5;
+        
+        const pollForPublish = async () => {
+          attempts++;
+          console.log(`🔄 Attempt ${attempts}/${maxAttempts}: Checking timeline status...`);
           
-          console.log('📊 Timeline status response:', response.data);
-          
-          if (response.data.isPublished) {
-            console.log('✅ Auto-publish detected! Refreshing timeline widget...');
-            setTimelineRefreshTrigger(prev => prev + 1);
-            return true; // Stop polling
-          } else {
-            console.log(`⏳ Not published yet (attempt ${attempts}/${maxAttempts})`);
+          try {
+            const response = await TimelinePublishingService.getTimelineStatus(projectId);
             
-            // Continue polling if we haven't reached max attempts
-            if (attempts < maxAttempts) {
-              setTimeout(pollForPublish, 2000); // Check again in 2 seconds
+            console.log('📊 Timeline status response:', response.data);
+            
+            if (response.data.isPublished) {
+              console.log('✅ Auto-publish detected! Refreshing timeline widget...');
+              setTimelineRefreshTrigger(prev => prev + 1);
+              return true;
             } else {
-              console.log('❌ Max attempts reached. Timeline post may not have been created.');
-              console.log('💡 Try clicking the "Publish to Timeline" button manually.');
+              console.log(`⏳ Not published yet (attempt ${attempts}/${maxAttempts})`);
+              
+              if (attempts < maxAttempts) {
+                setTimeout(pollForPublish, 2000);
+              } else {
+                console.log('❌ Max attempts reached. Timeline post may not have been created.');
+                console.log('💡 Try clicking the "Publish to Timeline" button manually.');
+              }
+              return false;
+            }
+          } catch (error) {
+            console.error(`❌ Error on attempt ${attempts}:`, error);
+            
+            if (attempts < maxAttempts) {
+              setTimeout(pollForPublish, 2000);
             }
             return false;
           }
-        } catch (error) {
-          console.error(`❌ Error on attempt ${attempts}:`, error);
-          
-          // Continue polling on error if we haven't reached max attempts
-          if (attempts < maxAttempts) {
-            setTimeout(pollForPublish, 2000);
-          }
-          return false;
-        }
-      };
+        };
+        
+        setTimeout(pollForPublish, 2000);
+      }
       
-      // Start polling after initial 2 second delay
-      setTimeout(pollForPublish, 2000);
+      setPreviousCompletionRate(projectStats.completionRate);
+    };
+
+    if (projectStats.completionRate !== undefined) {
+      checkForAutoPublish();
     }
-    
-    // Always update previous completion rate
-    setPreviousCompletionRate(projectStats.completionRate);
-  };
-
-  if (projectStats.completionRate !== undefined) {
-    checkForAutoPublish();
-  }
-}, [projectStats.completionRate, projectId, previousCompletionRate]);
-
+  }, [projectStats.completionRate, projectId, previousCompletionRate]);
 
   // Auto-refresh dashboard every 30 seconds
   useEffect(() => {
@@ -395,7 +563,7 @@ function SoloProjectDashboard() {
       console.log('Auto-refreshing dashboard...');
       fetchDashboardData();
       fetchRecentActivity();
-    }, 30000); // 30 seconds
+    }, 30000);
 
     return () => clearInterval(refreshInterval);
   }, [fetchDashboardData, fetchRecentActivity]);
@@ -481,14 +649,121 @@ function SoloProjectDashboard() {
     return 'Just now';
   };
 
+  // NEW: Chart options
+  const barChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false
+      },
+      title: {
+        display: true,
+        text: 'Weekly Challenge Performance',
+        color: '#ffffff',
+        font: { size: 16, weight: 'bold' }
+      },
+      tooltip: {
+        backgroundColor: 'rgba(26, 28, 32, 0.95)',
+        titleColor: '#ffffff',
+        bodyColor: '#d1d5db',
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderWidth: 1,
+        callbacks: {
+          label: function(context) {
+            return `Score: ${context.parsed.y}/10`;
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+        ticks: { color: '#9ca3af' }
+      },
+      y: {
+        min: 0,
+        max: 10,
+        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+        ticks: { 
+          color: '#9ca3af',
+          stepSize: 2
+        }
+      }
+    }
+  };
+
+  const doughnutChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'right',
+        labels: {
+          color: '#d1d5db',
+          font: { size: 12 },
+          padding: 15
+        }
+      },
+      title: {
+        display: true,
+        text: 'Goal Status Distribution',
+        color: '#ffffff',
+        font: { size: 16, weight: 'bold' }
+      },
+      tooltip: {
+        backgroundColor: 'rgba(26, 28, 32, 0.95)',
+        titleColor: '#ffffff',
+        bodyColor: '#d1d5db',
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderWidth: 1
+      }
+    }
+  };
+
+  const lineChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false
+      },
+      title: {
+        display: true,
+        text: 'Activity Timeline (Last 7 Days)',
+        color: '#ffffff',
+        font: { size: 16, weight: 'bold' }
+      },
+      tooltip: {
+        backgroundColor: 'rgba(26, 28, 32, 0.95)',
+        titleColor: '#ffffff',
+        bodyColor: '#d1d5db',
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderWidth: 1
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+        ticks: { color: '#9ca3af' }
+      },
+      y: {
+        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+        ticks: { 
+          color: '#9ca3af',
+          stepSize: 1
+        }
+      }
+    }
+  };
+
   // Styles object
   const styles = {
-    // NEW: Toggle button styles
     toggleButton: {
       position: 'fixed',
       top: '20px',
       left: isSidebarCollapsed ? '100px' : '290px',
-      zIndex: 999,  // Changed from 1100 to 999 (modal is at 1000)
+      zIndex: 999,
       width: '40px',
       height: '40px',
       borderRadius: '10px',
@@ -671,7 +946,8 @@ function SoloProjectDashboard() {
       color: '#9ca3af',
       margin: 0
     },
-    quickActionsSection: {
+    // NEW: Charts section styles
+    chartsSection: {
       position: 'relative',
       zIndex: 10,
       marginBottom: '32px'
@@ -683,6 +959,47 @@ function SoloProjectDashboard() {
       margin: '0 0 16px 0',
       display: 'flex',
       alignItems: 'center'
+    },
+    chartsGrid: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+      gap: '20px',
+      marginBottom: '20px'
+    },
+    chartCard: {
+      background: 'linear-gradient(135deg, rgba(26, 28, 32, 0.95), rgba(15, 17, 22, 0.90))',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      borderRadius: '16px',
+      padding: '20px',
+      backdropFilter: 'blur(20px)',
+      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+      minHeight: '350px'
+    },
+    chartCardFull: {
+      background: 'linear-gradient(135deg, rgba(26, 28, 32, 0.95), rgba(15, 17, 22, 0.90))',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      borderRadius: '16px',
+      padding: '20px',
+      backdropFilter: 'blur(20px)',
+      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+      minHeight: '300px'
+    },
+    chartContainer: {
+      height: '100%',
+      minHeight: '300px'
+    },
+    emptyChart: {
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '300px',
+      color: '#9ca3af'
+    },
+    quickActionsSection: {
+      position: 'relative',
+      zIndex: 10,
+      marginBottom: '32px'
     },
     quickActions: {
       display: 'grid',
@@ -845,7 +1162,6 @@ function SoloProjectDashboard() {
   if (loading) {
     return (
       <>
-        {/* Sidebar Toggle Button - OUTSIDE CONTAINER */}
         <button
           style={styles.toggleButton}
           onClick={toggleSidebar}
@@ -898,7 +1214,6 @@ function SoloProjectDashboard() {
 
   return (
     <>
-      {/* Sidebar Toggle Button - OUTSIDE CONTAINER */}
       <button
         style={styles.toggleButton}
         onClick={toggleSidebar}
@@ -992,12 +1307,12 @@ function SoloProjectDashboard() {
           </div>
         </div>
 
-         <TimelinePublisher
-  projectId={project.id}
-  projectTitle={project.title}
-  projectDescription={project.description}
-  refreshTrigger={timelineRefreshTrigger}
-/>
+        <TimelinePublisher
+          projectId={project.id}
+          projectTitle={project.title}
+          projectDescription={project.description}
+          refreshTrigger={timelineRefreshTrigger}
+        />
 
         {/* Analytics Cards */}
         <div style={styles.analyticsGrid}>
@@ -1021,11 +1336,13 @@ function SoloProjectDashboard() {
 
           <div style={styles.analyticsCard}>
             <div style={styles.analyticsHeader}>
-              <h3 style={styles.analyticsTitle}>Time Today</h3>
-              <Clock size={24} style={styles.analyticsIcon} />
+              <h3 style={styles.analyticsTitle}>Challenge Stats</h3>
+              <Zap size={24} style={styles.analyticsIcon} />
             </div>
-            <div style={styles.analyticsValue}>{projectStats.timeSpentToday}h</div>
-            <div style={styles.analyticsSubtext}>{projectStats.streakDays} day streak</div>
+            <div style={styles.analyticsValue}>{challengeStats.completedChallenges}</div>
+            <div style={styles.analyticsSubtext}>
+              {challengeStats.totalPoints} points • Avg: {challengeStats.averageScore}/10
+            </div>
           </div>
 
           <div style={styles.analyticsCard}>
@@ -1038,6 +1355,61 @@ function SoloProjectDashboard() {
             <div style={styles.progressBar}>
               <div style={{ ...styles.progressFill, width: `${projectStats.completionRate}%` }} />
             </div>
+          </div>
+        </div>
+
+        {/* NEW: Charts Section */}
+        <div style={styles.chartsSection}>
+          <h3 style={styles.sectionTitle}>
+            <BarChart3 size={20} style={{ color: '#a855f7', marginRight: '8px' }} />
+            Performance Analytics
+          </h3>
+
+          <div style={styles.chartsGrid}>
+            {/* Challenge Performance Chart */}
+            <div style={styles.chartCard}>
+              {challengePerformanceData && challengePerformanceData.labels.length > 0 ? (
+                <div style={styles.chartContainer}>
+                  <Bar data={challengePerformanceData} options={barChartOptions} />
+                </div>
+              ) : (
+                <div style={styles.emptyChart}>
+                  <Zap size={48} style={{ color: '#6b7280', marginBottom: '10px' }} />
+                  <p>No challenge data available</p>
+                  <p style={{ fontSize: '12px', marginTop: '8px' }}>
+                    Complete weekly challenges to see your performance here
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Goal Distribution Chart */}
+            <div style={styles.chartCard}>
+              {goalDistributionData && goalDistributionData.labels.length > 0 ? (
+                <div style={styles.chartContainer}>
+                  <Doughnut data={goalDistributionData} options={doughnutChartOptions} />
+                </div>
+              ) : (
+                <div style={styles.emptyChart}>
+                  <Target size={48} style={{ color: '#6b7280', marginBottom: '10px' }} />
+                  <p>No goal data available</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Activity Timeline */}
+          <div style={styles.chartCardFull}>
+            {progressTimelineData && progressTimelineData.labels.length > 0 ? (
+              <div style={styles.chartContainer}>
+                <Line data={progressTimelineData} options={lineChartOptions} />
+              </div>
+            ) : (
+              <div style={styles.emptyChart}>
+                <TrendingUp size={48} style={{ color: '#6b7280', marginBottom: '10px' }} />
+                <p>No activity data available</p>
+              </div>
+            )}
           </div>
         </div>
 
