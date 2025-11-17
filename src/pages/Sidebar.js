@@ -15,6 +15,7 @@ import {
   LogOut,
   ChevronRight 
 } from 'lucide-react';
+import FriendsChat from '../components/FriendsChat';
 
 function Sidebar() {
   const navigate = useNavigate();
@@ -513,6 +514,7 @@ function Sidebar() {
             {item.label}
           </div>
         )}
+        <FriendsChat />
       </>
     );
   };

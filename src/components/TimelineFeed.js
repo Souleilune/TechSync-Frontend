@@ -17,7 +17,8 @@ import {
   PartyPopper,
   X,
   Trophy,
-  Award
+  Award,
+  UserPlus
 } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
@@ -38,6 +39,8 @@ const TimelineFeed = () => {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [friendshipStatus, setFriendshipStatus] = useState(null);
+const [sendingRequest, setSendingRequest] = useState(false);
 
   useEffect(() => {
     fetchTimelineFeed();
@@ -75,35 +78,100 @@ const TimelineFeed = () => {
   };
 
   const handleUserClick = async (userId) => {
-    if (userId === user?.id) {
-      // Don't open modal for current user
-      return;
+  if (userId === user?.id) {
+    return;
+  }
+
+  try {
+    setProfileLoading(true);
+    setShowProfileModal(true);
+    setFriendshipStatus(null);  // ADD THIS LINE
+    
+    const token = localStorage.getItem('token');
+    const response = await axios.get(`${API_URL}/friends/${userId}/public-profile`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (response.data.success) {
+      setSelectedUser(response.data.data);
+      await checkFriendshipStatus(userId);  // ADD THIS LINE
     }
-
-    try {
-      setProfileLoading(true);
-      setShowProfileModal(true);
-      
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/friends/${userId}/public-profile`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      if (response.data.success) {
-        setSelectedUser(response.data.data);
-      }
-    } catch (err) {
-      console.error('Error fetching user profile:', err);
-      setShowProfileModal(false);
-    } finally {
-      setProfileLoading(false);
-    }
-  };
-
-  const closeProfileModal = () => {
+  } catch (err) {
+    console.error('Error fetching user profile:', err);
     setShowProfileModal(false);
-    setSelectedUser(null);
-  };
+  } finally {
+    setProfileLoading(false);
+  }
+};
+
+// Check friendship status
+const checkFriendshipStatus = async (userId) => {
+  try {
+    const token = localStorage.getItem('token');
+    const response = await axios.get(`${API_URL}/friends`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (response.data.success) {
+      const { friends, sentRequests, receivedRequests } = response.data.data;
+      
+      const isFriend = friends.some(f => f.id === userId);
+      if (isFriend) {
+        setFriendshipStatus('friends');
+        return;
+      }
+
+      const requestSent = sentRequests.some(r => r.id === userId);
+      if (requestSent) {
+        setFriendshipStatus('pending');
+        return;
+      }
+
+      const requestReceived = receivedRequests.some(r => r.id === userId);
+      if (requestReceived) {
+        setFriendshipStatus('received');
+        return;
+      }
+
+      setFriendshipStatus('none');
+    }
+  } catch (err) {
+    console.error('Error checking friendship status:', err);
+    setFriendshipStatus('none');
+  }
+};
+
+// Send friend request
+const handleAddFriend = async () => {
+  if (!selectedUser || sendingRequest) return;
+
+  try {
+    setSendingRequest(true);
+    const token = localStorage.getItem('token');
+    
+    const response = await axios.post(
+      `${API_URL}/friends/request`,
+      { addresseeId: selectedUser.user.id },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    if (response.data.success) {
+      setFriendshipStatus('pending');
+      alert('Friend request sent successfully!');
+    }
+  } catch (err) {
+    console.error('Error sending friend request:', err);
+    alert(err.response?.data?.message || 'Failed to send friend request');
+  } finally {
+    setSendingRequest(false);
+  }
+};
+
+const closeProfileModal = () => {
+  setShowProfileModal(false);
+  setSelectedUser(null);
+  setFriendshipStatus(null);  // ADD THIS LINE
+};
 
   const handleReaction = async (postId, reactionType) => {
     try {
@@ -451,6 +519,8 @@ const TimelineFeed = () => {
               : post.description}
           </p>
         )}
+
+        
 
         {/* Project Stats */}
         <div style={{
@@ -961,6 +1031,95 @@ const TimelineFeed = () => {
                       </p>
                     </div>
                   </div>
+
+                  {/* ADD FRIEND BUTTON */}
+{friendshipStatus && friendshipStatus !== 'friends' && (
+  <div style={{ marginBottom: '24px' }}>
+    {friendshipStatus === 'none' && (
+      <button
+        onClick={handleAddFriend}
+        disabled={sendingRequest}
+        style={{
+          width: '100%',
+          padding: '12px',
+          backgroundColor: sendingRequest ? '#6b7280' : '#3b82f6',
+          color: 'white',
+          border: 'none',
+          borderRadius: '8px',
+          fontSize: '16px',
+          fontWeight: '600',
+          cursor: sendingRequest ? 'not-allowed' : 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '8px',
+          transition: 'all 0.3s ease'
+        }}
+        onMouseEnter={(e) => {
+          if (!sendingRequest) e.target.style.backgroundColor = '#2563eb';
+        }}
+        onMouseLeave={(e) => {
+          if (!sendingRequest) e.target.style.backgroundColor = '#3b82f6';
+        }}
+      >
+        <UserPlus size={20} />
+        {sendingRequest ? 'Sending Request...' : 'Add Friend'}
+      </button>
+    )}
+    
+    {friendshipStatus === 'pending' && (
+      <div style={{
+        width: '100%',
+        padding: '12px',
+        backgroundColor: 'rgba(251, 191, 36, 0.1)',
+        border: '1px solid rgba(251, 191, 36, 0.3)',
+        borderRadius: '8px',
+        color: '#fbbf24',
+        textAlign: 'center',
+        fontSize: '14px',
+        fontWeight: '600'
+      }}>
+        <Clock size={16} style={{ display: 'inline', marginRight: '8px' }} />
+        Friend Request Pending
+      </div>
+    )}
+    
+    {friendshipStatus === 'received' && (
+      <div style={{
+        width: '100%',
+        padding: '12px',
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        border: '1px solid rgba(34, 197, 94, 0.3)',
+        borderRadius: '8px',
+        color: '#22c55e',
+        textAlign: 'center',
+        fontSize: '14px',
+        fontWeight: '600'
+      }}>
+        <Users size={16} style={{ display: 'inline', marginRight: '8px' }} />
+        Check your Friend Requests to accept
+      </div>
+    )}
+  </div>
+)}
+
+{friendshipStatus === 'friends' && (
+  <div style={{
+    width: '100%',
+    padding: '12px',
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    border: '1px solid rgba(34, 197, 94, 0.3)',
+    borderRadius: '8px',
+    color: '#22c55e',
+    textAlign: 'center',
+    fontSize: '14px',
+    fontWeight: '600',
+    marginBottom: '24px'
+  }}>
+    <Users size={16} style={{ display: 'inline', marginRight: '8px' }} />
+    Already Friends
+  </div>
+)}
 
                   {selectedUser.user.bio && (
                     <div style={{ marginBottom: '30px' }}>
