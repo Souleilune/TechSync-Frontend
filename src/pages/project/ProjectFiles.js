@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { githubService } from '../../services/githubService';
-import { PanelLeft } from 'lucide-react';
+import { PanelLeft, Folder, File, FolderOpen, ChevronRight, GitBranch } from 'lucide-react';
 
 // Background symbols component - WITH FLOATING ANIMATIONS
 const BackgroundSymbols = () => (
@@ -838,7 +838,8 @@ function ProjectFiles() {
     fileIcon: {
       marginRight: '12px',
       fontSize: '18px',
-      width: '20px'
+      width: '20px',
+      color: '#9ca3af'  // Add color for the icons
     },
     fileName: {
       flex: 1,
@@ -1141,7 +1142,7 @@ function ProjectFiles() {
                 e.target.style.boxShadow = '0 4px 16px rgba(36, 41, 46, 0.3)';
               }}
             >
-              <span>📚</span>
+              <Folder size={18} style={{ marginRight: '8px' }} />
               Connect GitHub
             </button>
           </div>
@@ -1244,17 +1245,23 @@ function ProjectFiles() {
                   <div style={styles.repositoryInfo}>
                     <span style={styles.repositoryName}>📚 {projectRepository.repository_full_name}</span>
                     {branches.length > 0 && error !== 'access_denied' && (
-                      <select 
-                        style={styles.branchSelector}
-                        value={currentBranch}
-                        onChange={(e) => handleBranchChange(e.target.value)}
-                      >
-                        {branches.map(branch => (
-                          <option key={branch.name} value={branch.name}>
-                            🌿 {branch.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                        <GitBranch size={16} style={{ position: 'absolute', left: '12px', pointerEvents: 'none', color: '#9ca3af', zIndex: 1 }} />
+                        <select 
+                          style={{
+                            ...styles.branchSelector,
+                            paddingLeft: '36px'  // Add padding to make room for the icon
+                          }}
+                          value={currentBranch}
+                          onChange={(e) => handleBranchChange(e.target.value)}
+                        >
+                          {branches.map((branch) => (
+                            <option key={branch.name} value={branch.name}>
+                              {branch.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     )}
                   </div>
                   <button 
@@ -1325,7 +1332,7 @@ function ProjectFiles() {
                               e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.02)';
                             }}
                           >
-                            <span style={styles.fileIcon}>📁</span>
+                            <FolderOpen size={18} style={styles.fileIcon} />
                             <span style={styles.fileName}>..</span>
                           </div>
                         )}
@@ -1343,7 +1350,7 @@ function ProjectFiles() {
                             }}
                           >
                             <span style={styles.fileIcon}>
-                              {file.type === 'dir' ? '📁' : '📄'}
+                              {file.type === 'dir' ? <Folder size={18} /> : <File size={18} />}
                             </span>
                             <span style={styles.fileName}>{file.name}</span>
                             {file.size && (
@@ -1359,7 +1366,8 @@ function ProjectFiles() {
                     {selectedFile && (
                       <div style={styles.fileViewer}>
                         <div style={styles.fileViewerHeader}>
-                          📄 {selectedFile.name} ({githubService.formatFileSize(selectedFile.size)})
+                          <File size={18} style={{ display: 'inline-block', marginRight: '8px', verticalAlign: 'middle' }} />
+                          {selectedFile.name} ({githubService.formatFileSize(selectedFile.size)})
                         </div>
                         <div style={styles.fileViewerContent}>
                           {fileContent}
