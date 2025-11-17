@@ -475,15 +475,18 @@ function ProjectFiles() {
   }, [checkGitHubConnection, checkProjectRepository]);
 
   const handleGitHubConnect = async () => {
-    try {
-      const response = await githubService.getOAuthURL();
-      if (response.success) {
-        window.location.href = response.data.url;
-      }
-    } catch (error) {
-      setError('Failed to initiate GitHub connection');
+  try {
+    // SAVE THE CURRENT PAGE URL BEFORE REDIRECTING
+    sessionStorage.setItem('github_oauth_return_url', window.location.pathname);
+    
+    const response = await githubService.getOAuthURL();
+    if (response.success) {
+      window.location.href = response.data.url;
     }
-  };
+  } catch (error) {
+    setError('Failed to initiate GitHub connection');
+  }
+};
 
   const handleDisconnectGitHub = async () => {
     try {
