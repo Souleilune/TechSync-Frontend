@@ -5,8 +5,14 @@ import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import io from 'socket.io-client';
 
+// ✅ FIX: Properly construct API and Socket URLs for production
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-const SOCKET_URL = process.env.REACT_APP_API_URL?.replace('/api', '') || 'http://localhost:5000';
+// Remove /api suffix to get base URL for socket connection
+const SOCKET_URL = process.env.REACT_APP_API_URL 
+  ? process.env.REACT_APP_API_URL.replace(/\/api\/?$/, '') 
+  : 'http://localhost:5000';
+
+console.log('🔧 FriendsChat URLs:', { API_URL, SOCKET_URL }); // Debug log
 
 const FriendsChat = () => {
   const { user } = useAuth();
@@ -26,28 +32,55 @@ const FriendsChat = () => {
     const token = localStorage.getItem('token');
     if (!token || !user) return;
 
+    console.log('🔌 Initializing socket connection to:', SOCKET_URL);
+
     const socketInstance = io(SOCKET_URL, {
       auth: { token },
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5
     });
 
     socketInstance.on('connect', () => {
-      console.log('✅ Friends chat socket connected');
+      console.log('✅ Friends chat socket connected to:', SOCKET_URL);
+      console.log('✅ Socket ID:', socketInstance.id);
       socketInstance.emit('join_friends_chat');
     });
 
+    socketInstance.on('disconnect', (reason) => {
+      console.log('❌ Socket disconnected:', reason);
+    });
+
+    socketInstance.on('connect_error', (error) => {
+      console.error('❌ Socket connection error:', error.message);
+    });
+
     socketInstance.on('friend_message', (data) => {
+      console.log('📨 Received friend_message:', data);
       if (selectedFriend && data.senderId === selectedFriend.id) {
         setMessages(prev => [...prev, data.message]);
         scrollToBottom();
       }
     });
 
+    socketInstance.on('friend_message_sent', (data) => {
+      console.log('✅ Message sent confirmation:', data);
+      // Message already added optimistically, just update with DB data
+      setMessages(prev => {
+        const withoutTemp = prev.filter(m => m.id !== 'temp-' + data.message.id);
+        return [...withoutTemp, data.message];
+      });
+      scrollToBottom();
+    });
+
     socketInstance.on('friend_online', (data) => {
+      console.log('🟢 Friend online:', data);
       setOnlineFriends(prev => new Set([...prev, data.userId]));
     });
 
     socketInstance.on('friend_offline', (data) => {
+      console.log('⚫ Friend offline:', data);
       setOnlineFriends(prev => {
         const newSet = new Set(prev);
         newSet.delete(data.userId);
@@ -56,19 +89,22 @@ const FriendsChat = () => {
     });
 
     socketInstance.on('online_friends_list', (data) => {
+      console.log('📋 Online friends list:', data);
       setOnlineFriends(new Set(data.onlineFriends));
     });
 
     socketInstance.on('error', (data) => {
       console.error('❌ Socket error:', data.message);
+      alert('Error: ' + data.message);
     });
 
     setSocket(socketInstance);
 
     return () => {
+      console.log('🔌 Disconnecting socket');
       socketInstance.disconnect();
     };
-  }, [user, selectedFriend]);
+  }, [user]); // Removed selectedFriend from dependencies to prevent reconnections
 
   useEffect(() => {
     if (isOpen) {
@@ -86,15 +122,17 @@ const FriendsChat = () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
+      console.log('📞 Fetching friends from:', `${API_URL}/friends`);
       const response = await axios.get(`${API_URL}/friends`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
       if (response.data.success) {
+        console.log('✅ Friends fetched:', response.data.data.friends?.length);
         setFriends(response.data.data.friends || []);
       }
     } catch (err) {
-      console.error('Error fetching friends:', err);
+      console.error('❌ Error fetching friends:', err.response?.data || err.message);
     } finally {
       setLoading(false);
     }
@@ -103,31 +141,43 @@ const FriendsChat = () => {
   const fetchMessages = async (friendId) => {
     try {
       const token = localStorage.getItem('token');
+      console.log('📞 Fetching messages from:', `${API_URL}/friends/${friendId}/messages`);
       const response = await axios.get(`${API_URL}/friends/${friendId}/messages`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
       if (response.data.success) {
+        console.log('✅ Messages fetched:', response.data.data?.length);
         setMessages(response.data.data || []);
         setTimeout(scrollToBottom, 100);
       }
     } catch (err) {
-      console.error('Error fetching messages:', err);
+      console.error('❌ Error fetching messages:', err.response?.data || err.message);
     }
   };
 
   const sendMessage = async () => {
-    if (!messageInput.trim() || !selectedFriend || !socket) return;
+    if (!messageInput.trim() || !selectedFriend || !socket) {
+      console.log('⚠️ Cannot send message:', { 
+        hasInput: !!messageInput.trim(), 
+        hasFriend: !!selectedFriend, 
+        hasSocket: !!socket 
+      });
+      return;
+    }
 
+    const tempId = 'temp-' + Date.now();
     const messageData = {
       recipientId: selectedFriend.id,
       content: messageInput.trim()
     };
 
+    console.log('📤 Sending message via socket:', messageData);
     socket.emit('send_friend_message', messageData);
     
-    const newMessage = {
-      id: Date.now().toString(),
+    // Add optimistic message
+    const optimisticMessage = {
+      id: tempId,
       sender_id: user.id,
       recipient_id: selectedFriend.id,
       content: messageInput.trim(),
@@ -135,13 +185,41 @@ const FriendsChat = () => {
       read: false
     };
     
-    setMessages(prev => [...prev, newMessage]);
+    setMessages(prev => [...prev, optimisticMessage]);
     setMessageInput('');
     scrollToBottom();
   };
 
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const formatTimestamp = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffInHours = (now - date) / (1000 * 60 * 60);
+
+    if (diffInHours < 24) {
+      return date.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        hour12: true 
+      });
+    } else {
+      return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      });
+    }
   };
 
   const filteredFriends = friends.filter(friend =>
@@ -158,16 +236,15 @@ const FriendsChat = () => {
       width: '60px',
       height: '60px',
       borderRadius: '50%',
-      backgroundColor: '#3b82f6',
-      color: 'white',
+      backgroundColor: '#10b981',
       border: 'none',
       cursor: 'pointer',
-      boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 1000,
-      transition: 'all 0.3s ease'
+      boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
+      transition: 'all 0.3s ease',
+      zIndex: 1000
     },
     chatWindow: {
       position: 'fixed',
@@ -175,408 +252,401 @@ const FriendsChat = () => {
       right: '24px',
       width: '400px',
       height: '600px',
-      backgroundColor: '#1a1c20',
-      borderRadius: '16px',
+      backgroundColor: '#1f2937',
+      borderRadius: '12px',
       boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-      border: '1px solid rgba(255, 255, 255, 0.1)',
       display: 'flex',
       flexDirection: 'column',
       zIndex: 1000,
       overflow: 'hidden'
     },
     header: {
+      backgroundColor: '#111827',
       padding: '16px',
-      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+      borderTopLeftRadius: '12px',
+      borderTopRightRadius: '12px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      backgroundColor: '#1f2937'
+      borderBottom: '1px solid #374151'
     },
-    title: {
-      fontSize: '18px',
-      fontWeight: '600',
-      color: 'white',
+    headerTitle: {
       display: 'flex',
       alignItems: 'center',
-      gap: '8px'
+      gap: '8px',
+      color: '#f3f4f6',
+      fontSize: '16px',
+      fontWeight: '600'
     },
     closeButton: {
-      background: 'transparent',
+      background: 'none',
       border: 'none',
       color: '#9ca3af',
       cursor: 'pointer',
       padding: '4px',
-      borderRadius: '4px',
-      transition: 'all 0.3s ease'
-    },
-    content: {
       display: 'flex',
-      height: 'calc(100% - 60px)',
-      overflow: 'hidden'
+      alignItems: 'center',
+      transition: 'color 0.2s'
     },
-    friendsList: {
-      width: '100%',
-      display: 'flex',
-      flexDirection: 'column'
-    },
-    searchBar: {
-      padding: '12px',
-      borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+    searchContainer: {
+      padding: '12px 16px',
+      borderBottom: '1px solid #374151'
     },
     searchInput: {
       width: '100%',
-      padding: '10px 12px',
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-      border: '1px solid rgba(255, 255, 255, 0.1)',
+      padding: '8px 12px 8px 36px',
+      backgroundColor: '#374151',
+      border: '1px solid #4b5563',
       borderRadius: '8px',
-      color: 'white',
+      color: '#f3f4f6',
       fontSize: '14px',
       outline: 'none'
     },
-    friendsListScroll: {
+    searchIcon: {
+      position: 'absolute',
+      left: '28px',
+      top: '22px',
+      color: '#9ca3af'
+    },
+    content: {
       flex: 1,
-      overflowY: 'auto'
+      display: 'flex',
+      flexDirection: selectedFriend ? 'column' : 'row',
+      overflow: 'hidden'
+    },
+    friendsList: {
+      flex: 1,
+      overflowY: 'auto',
+      padding: '8px'
     },
     friendItem: {
       padding: '12px',
+      borderRadius: '8px',
       cursor: 'pointer',
-      borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-      transition: 'all 0.3s ease',
+      transition: 'background-color 0.2s',
+      marginBottom: '4px',
       display: 'flex',
       alignItems: 'center',
       gap: '12px'
     },
-    avatar: {
+    friendAvatar: {
       width: '40px',
       height: '40px',
       borderRadius: '50%',
-      background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+      backgroundColor: '#4b5563',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      color: 'white',
-      fontWeight: 'bold',
-      fontSize: '16px',
-      position: 'relative',
-      flexShrink: 0
+      color: '#f3f4f6',
+      fontWeight: '600',
+      position: 'relative'
     },
     onlineIndicator: {
       position: 'absolute',
-      bottom: 0,
-      right: 0,
+      bottom: '0',
+      right: '0',
       width: '12px',
       height: '12px',
-      backgroundColor: '#22c55e',
-      border: '2px solid #1a1c20',
-      borderRadius: '50%'
+      borderRadius: '50%',
+      backgroundColor: '#10b981',
+      border: '2px solid #1f2937'
     },
     friendInfo: {
-      flex: 1,
-      minWidth: 0
+      flex: 1
     },
     friendName: {
-      color: 'white',
+      color: '#f3f4f6',
       fontSize: '14px',
-      fontWeight: '600',
-      whiteSpace: 'nowrap',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis'
+      fontWeight: '500'
     },
-    friendStatus: {
+    friendUsername: {
       color: '#9ca3af',
-      fontSize: '12px',
-      marginTop: '2px'
+      fontSize: '12px'
     },
     chatArea: {
-      width: '100%',
+      flex: 1,
       display: 'flex',
-      flexDirection: 'column'
+      flexDirection: 'column',
+      overflow: 'hidden'
     },
     chatHeader: {
       padding: '12px 16px',
-      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+      borderBottom: '1px solid #374151',
       display: 'flex',
       alignItems: 'center',
-      gap: '12px',
-      backgroundColor: '#1f2937'
+      gap: '12px'
     },
     backButton: {
-      background: 'transparent',
+      background: 'none',
       border: 'none',
       color: '#9ca3af',
       cursor: 'pointer',
       padding: '4px',
-      fontSize: '20px'
+      display: 'flex',
+      alignItems: 'center'
     },
-    messagesArea: {
+    messagesContainer: {
       flex: 1,
       overflowY: 'auto',
       padding: '16px',
       display: 'flex',
       flexDirection: 'column',
-      gap: '12px',
-      backgroundColor: '#151619'
+      gap: '12px'
+    },
+    messageGroup: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '4px'
     },
     message: {
-      maxWidth: '70%',
-      padding: '10px 14px',
+      maxWidth: '80%',
+      padding: '8px 12px',
       borderRadius: '12px',
       fontSize: '14px',
-      wordWrap: 'break-word',
-      lineHeight: '1.4'
+      wordWrap: 'break-word'
     },
     myMessage: {
       alignSelf: 'flex-end',
-      backgroundColor: '#3b82f6',
-      color: 'white',
-      borderBottomRightRadius: '4px'
+      backgroundColor: '#10b981',
+      color: '#fff'
     },
     theirMessage: {
       alignSelf: 'flex-start',
-      backgroundColor: 'rgba(255, 255, 255, 0.08)',
-      color: 'white',
-      borderBottomLeftRadius: '4px'
+      backgroundColor: '#374151',
+      color: '#f3f4f6'
     },
-    messageTime: {
+    timestamp: {
       fontSize: '11px',
-      color: 'rgba(255, 255, 255, 0.5)',
-      marginTop: '4px'
+      color: '#9ca3af',
+      marginTop: '2px'
     },
-    inputArea: {
+    inputContainer: {
       padding: '12px 16px',
-      borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+      borderTop: '1px solid #374151',
       display: 'flex',
-      gap: '8px',
-      backgroundColor: '#1a1c20'
+      gap: '8px'
     },
-    input: {
+    messageInput: {
       flex: 1,
       padding: '10px 12px',
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-      border: '1px solid rgba(255, 255, 255, 0.1)',
+      backgroundColor: '#374151',
+      border: '1px solid #4b5563',
       borderRadius: '8px',
-      color: 'white',
+      color: '#f3f4f6',
       fontSize: '14px',
-      outline: 'none'
+      outline: 'none',
+      resize: 'none'
     },
     sendButton: {
       padding: '10px 16px',
-      backgroundColor: '#3b82f6',
-      color: 'white',
+      backgroundColor: '#10b981',
       border: 'none',
       borderRadius: '8px',
+      color: '#fff',
       cursor: 'pointer',
-      transition: 'all 0.3s ease',
       display: 'flex',
-      alignItems: 'center'
+      alignItems: 'center',
+      justifyContent: 'center',
+      transition: 'background-color 0.2s'
     },
     emptyState: {
-      textAlign: 'center',
-      color: '#9ca3af',
-      padding: '40px 20px',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      height: '100%'
+      height: '100%',
+      color: '#9ca3af',
+      gap: '12px'
     }
   };
 
-  return (
-    <>
+  if (!isOpen) {
+    return (
       <button
         style={styles.chatButton}
-        onClick={() => setIsOpen(!isOpen)}
-        onMouseEnter={(e) => {
-          e.target.style.transform = 'scale(1.1)';
-          e.target.style.backgroundColor = '#2563eb';
-        }}
-        onMouseLeave={(e) => {
-          e.target.style.transform = 'scale(1)';
-          e.target.style.backgroundColor = '#3b82f6';
-        }}
+        onClick={() => setIsOpen(true)}
+        onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+        onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
       >
-        <MessageCircle size={26} />
+        <MessageCircle size={28} color="#fff" />
       </button>
+    );
+  }
 
-      {isOpen && (
-        <div style={styles.chatWindow}>
-          <div style={styles.header}>
-            <div style={styles.title}>
-              <Users size={20} />
-              Friends Chat
-            </div>
-            <button
-              style={styles.closeButton}
-              onClick={() => setIsOpen(false)}
-              onMouseEnter={(e) => {
-                e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-                e.target.style.color = 'white';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.backgroundColor = 'transparent';
-                e.target.style.color = '#9ca3af';
-              }}
-            >
-              <X size={20} />
-            </button>
-          </div>
+  return (
+    <div style={styles.chatWindow}>
+      <div style={styles.header}>
+        <div style={styles.headerTitle}>
+          <Users size={20} />
+          <span>Friends Chat</span>
+        </div>
+        <button
+          style={styles.closeButton}
+          onClick={() => setIsOpen(false)}
+          onMouseOver={(e) => e.currentTarget.style.color = '#f3f4f6'}
+          onMouseOut={(e) => e.currentTarget.style.color = '#9ca3af'}
+        >
+          <X size={20} />
+        </button>
+      </div>
 
-          <div style={styles.content}>
-            {!selectedFriend ? (
-              <div style={styles.friendsList}>
-                <div style={styles.searchBar}>
-                  <input
-                    type="text"
-                    placeholder="Search friends..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    style={styles.searchInput}
-                  />
-                </div>
-                
-                <div style={styles.friendsListScroll}>
-                  {loading ? (
-                    <div style={styles.emptyState}>
-                      <Clock size={40} />
-                      <div style={{ marginTop: '12px' }}>Loading...</div>
-                    </div>
-                  ) : filteredFriends.length === 0 ? (
-                    <div style={styles.emptyState}>
-                      <Users size={40} />
-                      <div style={{ marginTop: '12px' }}>No friends yet</div>
-                    </div>
-                  ) : (
-                    filteredFriends.map(friend => (
-                      <div
-                        key={friend.id}
-                        style={styles.friendItem}
-                        onClick={() => setSelectedFriend(friend)}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = 'transparent';
-                        }}
-                      >
-                        <div style={styles.avatar}>
-                          {friend.avatar_url ? (
-                            <img 
-                              src={friend.avatar_url} 
-                              alt={friend.full_name}
-                              style={{ width: '100%', height: '100%', borderRadius: '50%' }}
-                            />
-                          ) : (
-                            (friend.full_name || friend.username).charAt(0).toUpperCase()
-                          )}
-                          {onlineFriends.has(friend.id) && (
-                            <div style={styles.onlineIndicator} />
-                          )}
-                        </div>
-                        <div style={styles.friendInfo}>
-                          <div style={styles.friendName}>
-                            {friend.full_name || friend.username}
-                          </div>
-                          <div style={styles.friendStatus}>
-                            {onlineFriends.has(friend.id) ? 'Online' : 'Offline'}
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div style={styles.chatArea}>
-                <div style={styles.chatHeader}>
-                  <button
-                    style={styles.backButton}
-                    onClick={() => setSelectedFriend(null)}
-                  >
-                    ←
-                  </button>
-                  <div style={styles.avatar}>
-                    {selectedFriend.avatar_url ? (
-                      <img 
-                        src={selectedFriend.avatar_url} 
-                        alt={selectedFriend.full_name}
-                        style={{ width: '100%', height: '100%', borderRadius: '50%' }}
-                      />
-                    ) : (
-                      (selectedFriend.full_name || selectedFriend.username).charAt(0).toUpperCase()
-                    )}
-                    {onlineFriends.has(selectedFriend.id) && (
-                      <div style={styles.onlineIndicator} />
-                    )}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ color: 'white', fontSize: '15px', fontWeight: '600' }}>
-                      {selectedFriend.full_name || selectedFriend.username}
-                    </div>
-                    <div style={{ color: '#9ca3af', fontSize: '12px' }}>
-                      {onlineFriends.has(selectedFriend.id) ? 'Online' : 'Offline'}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={styles.messagesArea}>
-                  {messages.length === 0 ? (
-                    <div style={styles.emptyState}>
-                      <MessageCircle size={40} />
-                      <div style={{ marginTop: '12px' }}>No messages yet</div>
-                    </div>
-                  ) : (
-                    messages.map(message => {
-                      const isMyMessage = message.sender_id === user.id;
-                      return (
-                        <div
-                          key={message.id}
-                          style={{
-                            ...styles.message,
-                            ...(isMyMessage ? styles.myMessage : styles.theirMessage)
-                          }}
-                        >
-                          <div>{message.content}</div>
-                          <div style={styles.messageTime}>
-                            {new Date(message.created_at).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                  <div ref={messagesEndRef} />
-                </div>
-
-                <div style={styles.inputArea}>
-                  <input
-                    type="text"
-                    placeholder="Type a message..."
-                    value={messageInput}
-                    onChange={(e) => setMessageInput(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter' && messageInput.trim()) {
-                        sendMessage();
-                      }
-                    }}
-                    style={styles.input}
-                  />
-                  <button
-                    onClick={sendMessage}
-                    style={styles.sendButton}
-                    disabled={!messageInput.trim()}
-                  >
-                    <Send size={18} />
-                  </button>
-                </div>
-              </div>
-            )}
+      {!selectedFriend && (
+        <div style={styles.searchContainer}>
+          <div style={{ position: 'relative' }}>
+            <Search size={16} style={styles.searchIcon} />
+            <input
+              type="text"
+              placeholder="Search friends..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={styles.searchInput}
+            />
           </div>
         </div>
       )}
-    </>
+
+      <div style={styles.content}>
+        {!selectedFriend ? (
+          <div style={styles.friendsList}>
+            {loading ? (
+              <div style={styles.emptyState}>Loading friends...</div>
+            ) : filteredFriends.length === 0 ? (
+              <div style={styles.emptyState}>
+                <Users size={48} />
+                <p>No friends found</p>
+              </div>
+            ) : (
+              filteredFriends.map(friend => (
+                <div
+                  key={friend.id}
+                  style={styles.friendItem}
+                  onClick={() => setSelectedFriend(friend)}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#374151'}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <div style={styles.friendAvatar}>
+                    {friend.avatar_url ? (
+                      <img 
+                        src={friend.avatar_url} 
+                        alt={friend.full_name}
+                        style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      (friend.full_name || friend.username || 'U')[0].toUpperCase()
+                    )}
+                    {onlineFriends.has(friend.id) && (
+                      <div style={styles.onlineIndicator} />
+                    )}
+                  </div>
+                  <div style={styles.friendInfo}>
+                    <div style={styles.friendName}>
+                      {friend.full_name || friend.username}
+                    </div>
+                    <div style={styles.friendUsername}>
+                      @{friend.username}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <div style={styles.chatArea}>
+            <div style={styles.chatHeader}>
+              <button
+                style={styles.backButton}
+                onClick={() => setSelectedFriend(null)}
+              >
+                ←
+              </button>
+              <div style={styles.friendAvatar}>
+                {selectedFriend.avatar_url ? (
+                  <img 
+                    src={selectedFriend.avatar_url} 
+                    alt={selectedFriend.full_name}
+                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  (selectedFriend.full_name || selectedFriend.username || 'U')[0].toUpperCase()
+                )}
+                {onlineFriends.has(selectedFriend.id) && (
+                  <div style={styles.onlineIndicator} />
+                )}
+              </div>
+              <div style={styles.friendInfo}>
+                <div style={styles.friendName}>
+                  {selectedFriend.full_name || selectedFriend.username}
+                </div>
+                <div style={styles.friendUsername}>
+                  {onlineFriends.has(selectedFriend.id) ? 'Online' : 'Offline'}
+                </div>
+              </div>
+            </div>
+
+            <div style={styles.messagesContainer}>
+              {messages.length === 0 ? (
+                <div style={styles.emptyState}>
+                  <MessageCircle size={48} />
+                  <p>No messages yet</p>
+                  <p style={{ fontSize: '12px' }}>Start the conversation!</p>
+                </div>
+              ) : (
+                messages.map((message) => {
+                  const isMyMessage = message.sender_id === user.id;
+                  return (
+                    <div
+                      key={message.id}
+                      style={{
+                        ...styles.messageGroup,
+                        alignItems: isMyMessage ? 'flex-end' : 'flex-start'
+                      }}
+                    >
+                      <div
+                        style={{
+                          ...styles.message,
+                          ...(isMyMessage ? styles.myMessage : styles.theirMessage)
+                        }}
+                      >
+                        {message.content}
+                      </div>
+                      <div 
+                        style={{
+                          ...styles.timestamp,
+                          textAlign: isMyMessage ? 'right' : 'left'
+                        }}
+                      >
+                        {formatTimestamp(message.created_at)}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            <div style={styles.inputContainer}>
+              <textarea
+                value={messageInput}
+                onChange={(e) => setMessageInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Type a message..."
+                style={styles.messageInput}
+                rows={1}
+              />
+              <button
+                onClick={sendMessage}
+                style={styles.sendButton}
+                disabled={!messageInput.trim()}
+                onMouseOver={(e) => !messageInput.trim() ? null : e.currentTarget.style.backgroundColor = '#059669'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#10b981'}
+              >
+                <Send size={18} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 
