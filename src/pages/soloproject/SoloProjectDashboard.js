@@ -266,29 +266,36 @@ const fetchChallengeData = useCallback(async () => {
   try {
     console.log('📊 Fetching challenge data for project:', projectId);
     
-    // Get all user attempts
     const response = await ChallengeAPI.getUserAttempts({ 
       page: 1, 
       limit: 100 
     });
     
-    // Extract attempts array from response
     const allAttempts = response?.data?.data?.attempts || response?.data?.attempts || [];
-    
-    // ✅ CRITICAL: Filter attempts for THIS solo project only
     const projectAttempts = allAttempts.filter(a => a.project_id === projectId);
     
     console.log('📈 Found attempts:', {
       total: allAttempts.length,
-      forThisProject: projectAttempts.length
+      forThisProject: projectAttempts.length,
+      attempts: projectAttempts.map(a => ({ 
+        id: a.id, 
+        score: a.score, 
+        status: a.status 
+      }))
     });
     
-    // Filter only passed attempts for statistics
-    const passedAttempts = projectAttempts.filter(a => a.status === 'passed');
+    // ✅ FIX: Include ALL attempts (passed or failed) for statistics
+    const validAttempts = projectAttempts.filter(a => 
+      a.score !== null && 
+      a.score !== undefined && 
+      a.submitted_at
+    );
+    
+    console.log('✅ Valid attempts with scores:', validAttempts.length);
     
     // Calculate statistics
-    const totalCompleted = passedAttempts.length;
-    const totalScore = passedAttempts.reduce((sum, a) => sum + (a.score || 0), 0);
+    const totalCompleted = validAttempts.length;
+    const totalScore = validAttempts.reduce((sum, a) => sum + (a.score || 0), 0);
     const avgScore = totalCompleted > 0 ? Math.round(totalScore / totalCompleted) : 0;
     
     setChallengeStats({
@@ -298,11 +305,16 @@ const fetchChallengeData = useCallback(async () => {
       totalPoints: totalScore
     });
 
-    // Prepare chart data - last 7 challenges
-    const recentAttempts = passedAttempts
+    // ✅ FIX: Show last 7 attempts (not just passed ones)
+    const recentAttempts = validAttempts
       .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at))
       .slice(0, 7)
       .reverse();
+    
+    console.log('📊 Chart data:', recentAttempts.map(a => ({
+      score: a.score,
+      submitted: a.submitted_at
+    })));
     
     if (recentAttempts.length > 0) {
       setChallengePerformanceData({
@@ -310,26 +322,30 @@ const fetchChallengeData = useCallback(async () => {
         datasets: [{
           label: 'Challenge Score',
           data: recentAttempts.map(a => a.score || 0),
-          backgroundColor: recentAttempts.map(a => 
-            (a.score || 0) >= 80 ? 'rgba(16, 185, 129, 0.8)' : 
-            (a.score || 0) >= 60 ? 'rgba(251, 191, 36, 0.8)' : 
-            'rgba(239, 68, 68, 0.8)'
-          ),
-          borderColor: recentAttempts.map(a => 
-            (a.score || 0) >= 80 ? 'rgba(16, 185, 129, 1)' : 
-            (a.score || 0) >= 60 ? 'rgba(251, 191, 36, 1)' : 
-            'rgba(239, 68, 68, 1)'
-          ),
+          // ✅ FIX: Correct thresholds for 0-100 scale
+          backgroundColor: recentAttempts.map(a => {
+            const score = a.score || 0;
+            if (score >= 70) return 'rgba(16, 185, 129, 0.8)';  // Green for passing
+            if (score >= 50) return 'rgba(251, 191, 36, 0.8)';  // Yellow for close
+            return 'rgba(239, 68, 68, 0.8)';  // Red for low score
+          }),
+          borderColor: recentAttempts.map(a => {
+            const score = a.score || 0;
+            if (score >= 70) return 'rgba(16, 185, 129, 1)';
+            if (score >= 50) return 'rgba(251, 191, 36, 1)';
+            return 'rgba(239, 68, 68, 1)';
+          }),
           borderWidth: 2
         }]
       });
+      
+      console.log('✅ Chart data set successfully!');
     } else {
-      // No attempts yet - set empty state
+      console.log('⚠️ No valid attempts to display');
       setChallengePerformanceData(null);
     }
   } catch (error) {
     console.error('❌ Error fetching challenge data:', error);
-    // Set empty state on error
     setChallengePerformanceData(null);
   }
 }, [projectId]);
@@ -675,47 +691,48 @@ const fetchChallengeData = useCallback(async () => {
 
   // NEW: Chart options
   const barChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false
-      },
-      title: {
-        display: true,
-        text: 'Weekly Challenge Performance',
-        color: '#ffffff',
-        font: { size: 16, weight: 'bold' }
-      },
-      tooltip: {
-        backgroundColor: 'rgba(26, 28, 32, 0.95)',
-        titleColor: '#ffffff',
-        bodyColor: '#d1d5db',
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        borderWidth: 1,
-        callbacks: {
-          label: function(context) {
-            return `Score: ${context.parsed.y}/10`;
-          }
-        }
-      }
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      display: false
     },
-    scales: {
-      x: {
-        grid: { color: 'rgba(255, 255, 255, 0.05)' },
-        ticks: { color: '#9ca3af' }
-      },
-      y: {
-        min: 0,
-        max: 10,
-        grid: { color: 'rgba(255, 255, 255, 0.05)' },
-        ticks: { 
-          color: '#9ca3af',
-          stepSize: 2
+    title: {
+      display: true,
+      text: 'Weekly Challenge Performance',
+      color: '#ffffff',
+      font: { size: 16, weight: 'bold' }
+    },
+    tooltip: {
+      backgroundColor: 'rgba(26, 28, 32, 0.95)',
+      titleColor: '#ffffff',
+      bodyColor: '#d1d5db',
+      borderColor: 'rgba(255, 255, 255, 0.1)',
+      borderWidth: 1,
+      callbacks: {
+        label: function(context) {
+          // ✅ FIX: Show correct score out of 100
+          return `Score: ${context.parsed.y}/100`;
         }
       }
     }
-  };
+  },
+  scales: {
+    x: {
+      grid: { color: 'rgba(255, 255, 255, 0.05)' },
+      ticks: { color: '#9ca3af' }
+    },
+    y: {
+      min: 0,
+      max: 100,  // ✅ FIX: Changed from 10 to 100
+      grid: { color: 'rgba(255, 255, 255, 0.05)' },
+      ticks: { 
+        color: '#9ca3af',
+        stepSize: 20  // ✅ FIX: Changed from 2 to 20
+      }
+    }
+  }
+};
 
   const doughnutChartOptions = {
     responsive: true,
