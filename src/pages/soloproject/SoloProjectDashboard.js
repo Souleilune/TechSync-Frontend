@@ -8,6 +8,7 @@ import { BarChart3, Target, Clock, TrendingUp, Plus, StickyNote, FileText, Award
 import AwardsDisplay from '../../components/AwardsDisplay';
 import TimelinePublisher from '../../components/TimelinePublisher';
 import TimelinePublishingService from '../../services/timelinePublishingService';
+import ChallengeAPI from '../../services/challengeAPI';
 
 // NEW: Chart.js imports
 import {
@@ -510,6 +511,7 @@ const fetchChallengeData = useCallback(async () => {
   useEffect(() => {
     fetchDashboardData();
     fetchRecentActivity();
+    fetchChallengeData();
   }, [fetchDashboardData, fetchRecentActivity]);
 
   // NEW: Prepare timeline chart when activity updates
