@@ -12,6 +12,8 @@ import ProjectChallengeInterface from '../components/ProjectChallengeInterface';
 import ProjectDetailModal from '../components/ProjectDetailModal';
 import TimelineFeed from '../components/TimelineFeed';
 import { Plus, Bell, Rocket, Code, Users, BookOpen, HelpCircle, LockKeyhole, PanelLeft, Sparkles } from 'lucide-react';
+import ProjectMatchmaking from '../components/ProjectMatchmaking/ProjectMatchmaking';
+
 
 const formatSkillsDescription = (user) => {
   if (!user) return 'Complete your profile to get personalized recommendations!';
@@ -2058,15 +2060,16 @@ useEffect(() => {
             For You
           </button>
             <button
-              style={{
-                ...styles.tabButton,
-                backgroundColor: activeTab === 'recommended' ? '#1a1d24' : 'transparent',
-                color: '#E8EDF9'
-              }}
-              onClick={() => setActiveTab('recommended')}
-            >
-              Group Project
-            </button>
+  style={{
+    ...styles.tabButton,
+    backgroundColor: activeTab === 'recommended' ? '#1a1d24' : 'transparent',
+    color: '#E8EDF9'
+  }}
+  onClick={() => setActiveTab('recommended')}
+>
+  
+  Find Match
+</button>
 
             <button
               style={{
@@ -2097,229 +2100,8 @@ useEffect(() => {
           )}
             {/* RECOMMENDED PROJECTS TAB */}
             {activeTab === 'recommended' && (
-              <div>
-                <h3 style={styles.sectionTitle}>
-                  <Code size={24} style={{ color: '#3b82f6' }} />
-                  Recommended Projects
-                </h3>
-                <p style={styles.sectionDescription}>
-                  {formatSkillsDescription(user)}
-                </p>
-
-
-                {/* Filter and Sort Section */}
-                {!loadingRecommendations && recommendedProjects.length > 0 && (
-                  <div style={styles.filterSection}>
-                    <div style={styles.filterHeader}>
-                      <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold', color: 'white' }}>
-                        Filter & Sort Projects
-                      </h4>
-                      <button
-                        style={styles.filterToggle}
-                        onClick={() => setShowFilters(!showFilters)}
-                        onMouseEnter={(e) => {
-                          e.target.style.backgroundColor = '#3b82f6';
-                          e.target.style.color = 'white';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.target.style.backgroundColor = 'transparent';
-                          e.target.style.color = '#3b82f6';
-                        }}
-                      >
-                        {showFilters ? 'Hide Filters' : 'Show Filters'}
-                      </button>
-                    </div>
-
-                    {showFilters && (
-                      <>
-                        <div style={styles.filterControls}>
-                          {/* Language Filter */}
-                          <div style={styles.filterGroup}>
-                            <label style={styles.filterLabel}>Filter by Language</label>
-                            <select
-                              style={styles.filterSelect}
-                              value={filterLanguage}
-                              onChange={(e) => setFilterLanguage(e.target.value)}
-                              onMouseEnter={(e) => {
-                                Object.assign(e.target.style, styles.filterSelectHover);
-                              }}
-                              onMouseLeave={(e) => {
-                                Object.assign(e.target.style, styles.filterSelect);
-                              }}
-                              onFocus={(e) => {
-                                Object.assign(e.target.style, styles.filterSelectFocus);
-                              }}
-                              onBlur={(e) => {
-                                Object.assign(e.target.style, styles.filterSelect);
-                              }}
-                            >
-                              <option value="all">All Languages</option>
-                              {getAvailableLanguages().map(lang => (
-                                <option key={lang} value={lang}>{lang}</option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {/* Difficulty Filter */}
-                          <div style={styles.filterGroup}>
-                            <label style={styles.filterLabel}>Filter by Difficulty</label>
-                            <select
-                              style={styles.filterSelect}
-                              value={filterDifficulty}
-                              onChange={(e) => setFilterDifficulty(e.target.value)}
-                              onMouseEnter={(e) => {
-                                Object.assign(e.target.style, styles.filterSelectHover);
-                              }}
-                              onMouseLeave={(e) => {
-                                Object.assign(e.target.style, styles.filterSelect);
-                              }}
-                              onFocus={(e) => {
-                                Object.assign(e.target.style, styles.filterSelectFocus);
-                              }}
-                              onBlur={(e) => {
-                                Object.assign(e.target.style, styles.filterSelect);
-                              }}
-                            >
-                              <option value="all">All Difficulties</option>
-                              <option value="easy">Easy</option>
-                              <option value="medium">Medium</option>
-                              <option value="hard">Hard</option>
-                            </select>
-                          </div>
-
-                          {/* Sort Options */}
-                          <div style={styles.filterGroup}>
-                            <label style={styles.filterLabel}>Sort by</label>
-                            <div style={styles.sortButtons}>
-                              <button
-                                style={{
-                                  ...styles.sortButton,
-                                  ...(sortBy === 'match' ? styles.sortButtonActive : {})
-                                }}
-                                onClick={() => handleSortChange('match')}
-                              >
-                                Match Rate {sortBy === 'match' && (sortOrder === 'desc' ? '↓' : '↑')}
-                              </button>
-                              <button
-                                style={{
-                                  ...styles.sortButton,
-                                  ...(sortBy === 'difficulty' ? styles.sortButtonActive : {})
-                                }}
-                                onClick={() => handleSortChange('difficulty')}
-                              >
-                                Difficulty {sortBy === 'difficulty' && (sortOrder === 'desc' ? '↓' : '↑')}
-                              </button>
-                              <button
-                                style={{
-                                  ...styles.sortButton,
-                                  ...(sortBy === 'members' ? styles.sortButtonActive : {})
-                                }}
-                                onClick={() => handleSortChange('members')}
-                              >
-                                Team Size {sortBy === 'members' && (sortOrder === 'desc' ? '↓' : '↑')}
-                              </button>
-                              <button
-                                style={{
-                                  ...styles.sortButton,
-                                  ...(sortBy === 'title' ? styles.sortButtonActive : {})
-                                }}
-                                onClick={() => handleSortChange('title')}
-                              >
-                                Title {sortBy === 'title' && (sortOrder === 'desc' ? '↓' : '↑')}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Reset Button */}
-                        <div style={{ textAlign: 'right' }}>
-                          <button
-                            style={styles.resetButton}
-                            onClick={resetFilters}
-                            onMouseEnter={(e) => {
-                              e.target.style.backgroundColor = '#4b5563';
-                              e.target.style.transform = 'translateY(-1px)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.target.style.backgroundColor = '#6b7280';
-                              e.target.style.transform = 'translateY(0)';
-                            }}
-                          >
-                            Reset Filters
-                          </button>
-                        </div>
-                      </>
-                    )}
-
-                    {/* Results Count */}
-                    <div style={styles.resultsCount}>
-                      Showing {filteredProjects.length} of {recommendedProjects.length} projects
-                      {(filterLanguage !== 'all' || filterDifficulty !== 'all') && (
-                        <span style={{ color: '#60a5fa', fontWeight: '500' }}> (filtered)</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Project Grid */}
-                {loadingRecommendations ? (
-                  <div style={styles.loading}>
-                    <div style={{
-                      width: '48px',
-                      height: '48px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }} className="global-loading-spinner">
-                      <img 
-                        src="/images/logo/TechSyncLogo.png" 
-                        alt="TechSync Logo" 
-                        style={{
-                          width: '125%',
-                          height: '125%',
-                          objectFit: 'contain'
-                        }}
-                      />
-                    </div>
-                    <span>Loading personalized recommendation...</span>
-                  </div>
-                ) : filteredProjects.length > 0 ? (
-                  <div style={styles.recommendationsGrid}>
-                    {filteredProjects.map((project, index) => (
-                      <EnhancedProjectCard
-                        key={project.projectId || project.id || index}
-                        project={project}
-                        styles={styles}
-                        getDifficultyStyle={getDifficultyStyle}
-                        handleProjectClick={handleProjectClick}
-                        handleJoinProject={handleJoinProject}
-                        colorVariant={colorVariants[index % colorVariants.length]}
-                      />
-                    ))}
-                  </div>
-                ) : recommendedProjects.length > 0 ? (
-                  <div style={styles.emptyState}>
-                    No projects match your current filters.
-                    <br />
-                    <button
-                      style={{
-                        ...styles.resetButton,
-                        marginTop: '12px'
-                      }}
-                      onClick={resetFilters}
-                    >
-                      Reset Filters
-                    </button>
-                  </div>
-                ) : (
-                  <div style={styles.emptyState}>
-                    No project recommendations available yet.
-                    Complete more of your profile to get personalized recommendations!
-                  </div>
-                )}
-              </div>
-            )}
-
+  <ProjectMatchmaking onProjectSelect={handleProjectClick} />
+)}
             {/* FOR YOU TAB - SOLO PROJECT WITH AI CHAT */}
             {activeTab === 'forYou' && (
               <div>
