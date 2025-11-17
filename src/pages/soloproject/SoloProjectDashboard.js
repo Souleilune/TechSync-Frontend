@@ -477,10 +477,6 @@ const fetchChallengeData = useCallback(async () => {
         if (recentTasks && recentTasks.length > 0) {
           setTasks(recentTasks);
         }
-        
-        // NEW: Fetch chart data
-        await fetchChallengeData();
-        await prepareGoalDistribution();
       }
 
     } catch (error) {
@@ -489,7 +485,7 @@ const fetchChallengeData = useCallback(async () => {
     } finally {
       setLoading(false);
     }
-  }, [projectId, fetchChallengeData, prepareGoalDistribution]);
+  }, [projectId]);
 
   // Fetch recent activity
   const fetchRecentActivity = useCallback(async () => {
@@ -508,11 +504,21 @@ const fetchChallengeData = useCallback(async () => {
     }
   }, [projectId]);
 
-  useEffect(() => {
-    fetchDashboardData();
-    fetchRecentActivity();
-    fetchChallengeData();
-  }, [fetchDashboardData, fetchRecentActivity]);
+ useEffect(() => {
+    const loadAllData = async () => {
+      await fetchDashboardData();
+      await fetchRecentActivity();
+      
+      // ✅ CRITICAL: Call these AFTER dashboard data loads
+      console.log('📊 Loading chart data...');
+      await fetchChallengeData();
+      await prepareGoalDistribution();
+    };
+
+    if (projectId) {
+      loadAllData();
+    }
+  }, [projectId, fetchDashboardData, fetchRecentActivity, fetchChallengeData, prepareGoalDistribution]);
 
   // NEW: Prepare timeline chart when activity updates
   useEffect(() => {
