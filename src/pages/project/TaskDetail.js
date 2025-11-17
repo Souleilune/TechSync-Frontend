@@ -16,6 +16,9 @@ const TaskDetail = () => {
     const [error, setError] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
     const [editForm, setEditForm] = useState({});
+    const [codeSubmission, setCodeSubmission] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    const [evaluationResult, setEvaluationResult] = useState(null);
     const [submissionHistory, setSubmissionHistory] = useState([]);
     const [loadingSubmissions, setLoadingSubmissions] = useState(false);
     const [selectedSubmission, setSelectedSubmission] = useState(null);
@@ -156,8 +159,6 @@ const formatDateTime = (dateString) => {
         minute: '2-digit'
     });
 };
-
-    
 
     const handleStatusChange = async (newStatus) => {
     try {
@@ -508,12 +509,12 @@ const formatDateTime = (dateString) => {
                         </div>
                     )}
                 </div>
+
                 <div style={{
     ...styles.description,
     marginTop: '24px'
 }}>
-
-                    <div style={{
+    <div style={{
         display: 'flex',
         alignItems: 'center',
         gap: '8px',
