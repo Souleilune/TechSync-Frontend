@@ -1,13 +1,41 @@
-// frontend/src/pages/project/ProjectDashboard.js - WITH SIDEBAR TOGGLE
+// frontend/src/pages/project/ProjectDashboard.js - ENHANCED WITH CHART.JS ANALYTICS
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { projectService } from '../../services/projectService';
 import ProjectCompletionButton from '../../components/ProjectCompletion/ProjectCompletionButton';
 import { taskService } from '../../services/taskService';
 import { useAuth } from '../../contexts/AuthContext';
-import { Clock, CheckCircle, FileText, UserPlus, Edit, Upload, PanelLeft } from 'lucide-react';
+import { Clock, CheckCircle, FileText, UserPlus, Edit, Upload, PanelLeft, TrendingUp, Users, BarChart3 } from 'lucide-react';
 
-// Background symbols component - WITH FLOATING ANIMATIONS
+// NEW: Chart.js imports
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
+import { Bar, Doughnut, Line } from 'react-chartjs-2';
+
+// NEW: Register Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend
+);
+
+// Background symbols component - WITH FLOATING ANIMATIONS (UNCHANGED)
 const BackgroundSymbols = () => (
   <>
     {/* Floating Animation CSS */}
@@ -432,13 +460,18 @@ function ProjectDashboard() {
   const [loading, setLoading] = useState(true);
   const [loadingActivity, setLoadingActivity] = useState(true);
 
-  // NEW STATE: Track sidebar collapsed state
+  // NEW: Chart data states
+  const [memberContributionData, setMemberContributionData] = useState(null);
+  const [taskStatusData, setTaskStatusData] = useState(null);
+  const [progressTimelineData, setProgressTimelineData] = useState(null);
+
+  // Track sidebar collapsed state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem('projectSidebarCollapsed');
     return saved === 'true';
   });
 
-  // NEW: Function to toggle sidebar
+  // Function to toggle sidebar
   const toggleSidebar = () => {
     const newCollapsedState = !isSidebarCollapsed;
     setIsSidebarCollapsed(newCollapsedState);
@@ -449,7 +482,7 @@ function ProjectDashboard() {
     }));
   };
 
-  // NEW: Sync with sidebar toggle events
+  // Sync with sidebar toggle events
   useEffect(() => {
     const handleSidebarToggle = (event) => {
       setIsSidebarCollapsed(event.detail.collapsed);
@@ -458,6 +491,157 @@ function ProjectDashboard() {
     window.addEventListener('projectSidebarToggle', handleSidebarToggle);
     return () => window.removeEventListener('projectSidebarToggle', handleSidebarToggle);
   }, []);
+
+  // NEW: Calculate member contributions for chart
+  const calculateMemberContributions = (tasks, projectMembers) => {
+    const contributions = {};
+    
+    // Initialize all members with 0 tasks
+    projectMembers.forEach(member => {
+      const name = member.full_name || member.username || member.users?.full_name || member.users?.username || 'Unknown';
+      contributions[name] = {
+        total: 0,
+        completed: 0,
+        inProgress: 0
+      };
+    });
+
+    // Count tasks by assignee
+    tasks.forEach(task => {
+      if (task.assigned_to) {
+        const member = projectMembers.find(m => 
+          (m.id === task.assigned_to) || (m.users?.id === task.assigned_to) || (m.user_id === task.assigned_to)
+        );
+        
+        if (member) {
+          const name = member.full_name || member.username || member.users?.full_name || member.users?.username || 'Unknown';
+          
+          if (!contributions[name]) {
+            contributions[name] = { total: 0, completed: 0, inProgress: 0 };
+          }
+          
+          contributions[name].total++;
+          
+          if (task.status === 'completed') {
+            contributions[name].completed++;
+          } else if (task.status === 'in_progress') {
+            contributions[name].inProgress++;
+          }
+        }
+      }
+    });
+
+    return contributions;
+  };
+
+  // NEW: Prepare chart data
+  const prepareChartData = (tasks, projectMembers) => {
+    // Member Contribution Chart
+    const contributions = calculateMemberContributions(tasks, projectMembers);
+    const memberNames = Object.keys(contributions);
+    
+    setMemberContributionData({
+      labels: memberNames,
+      datasets: [
+        {
+          label: 'Completed Tasks',
+          data: memberNames.map(name => contributions[name].completed),
+          backgroundColor: 'rgba(16, 185, 129, 0.8)',
+          borderColor: 'rgba(16, 185, 129, 1)',
+          borderWidth: 1
+        },
+        {
+          label: 'In Progress Tasks',
+          data: memberNames.map(name => contributions[name].inProgress),
+          backgroundColor: 'rgba(59, 130, 246, 0.8)',
+          borderColor: 'rgba(59, 130, 246, 1)',
+          borderWidth: 1
+        },
+        {
+          label: 'Not Started',
+          data: memberNames.map(name => 
+            contributions[name].total - contributions[name].completed - contributions[name].inProgress
+          ),
+          backgroundColor: 'rgba(156, 163, 175, 0.8)',
+          borderColor: 'rgba(156, 163, 175, 1)',
+          borderWidth: 1
+        }
+      ]
+    });
+
+    // Task Status Distribution
+    const statusCounts = {
+      todo: tasks.filter(t => t.status === 'todo').length,
+      in_progress: tasks.filter(t => t.status === 'in_progress').length,
+      in_review: tasks.filter(t => t.status === 'in_review').length,
+      completed: tasks.filter(t => t.status === 'completed').length,
+      blocked: tasks.filter(t => t.status === 'blocked').length
+    };
+
+    setTaskStatusData({
+      labels: ['To Do', 'In Progress', 'In Review', 'Completed', 'Blocked'],
+      datasets: [{
+        data: [
+          statusCounts.todo,
+          statusCounts.in_progress,
+          statusCounts.in_review,
+          statusCounts.completed,
+          statusCounts.blocked
+        ],
+        backgroundColor: [
+          'rgba(156, 163, 175, 0.8)',
+          'rgba(59, 130, 246, 0.8)',
+          'rgba(251, 191, 36, 0.8)',
+          'rgba(16, 185, 129, 0.8)',
+          'rgba(239, 68, 68, 0.8)'
+        ],
+        borderColor: [
+          'rgba(156, 163, 175, 1)',
+          'rgba(59, 130, 246, 1)',
+          'rgba(251, 191, 36, 1)',
+          'rgba(16, 185, 129, 1)',
+          'rgba(239, 68, 68, 1)'
+        ],
+        borderWidth: 2
+      }]
+    });
+
+    // Progress Timeline (last 7 days)
+    const last7Days = [];
+    const now = new Date();
+    
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      last7Days.push(date);
+    }
+
+    const timelineData = last7Days.map(date => {
+      const tasksCompletedByDate = tasks.filter(task => {
+        if (!task.updated_at || task.status !== 'completed') return false;
+        const taskDate = new Date(task.updated_at);
+        return taskDate.toDateString() === date.toDateString();
+      }).length;
+
+      return tasksCompletedByDate;
+    });
+
+    setProgressTimelineData({
+      labels: last7Days.map(date => 
+        date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      ),
+      datasets: [{
+        label: 'Tasks Completed',
+        data: timelineData,
+        borderColor: 'rgba(16, 185, 129, 1)',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        tension: 0.4,
+        fill: true,
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }]
+    });
+  };
 
   // Fetch all dashboard data
   const fetchDashboardData = useCallback(async () => {
@@ -470,9 +654,11 @@ function ProjectDashboard() {
       setProject(projectData);
 
       // Fetch project members
+      let allMembers = [];
       try {
         const membersResponse = await projectService.getProjectMembers(projectId);
-        setMembers([membersResponse.data.owner, ...membersResponse.data.members]);
+        allMembers = [membersResponse.data.owner, ...membersResponse.data.members];
+        setMembers(allMembers);
       } catch (error) {
         console.log('Could not fetch members:', error);
         setMembers([]);
@@ -512,7 +698,13 @@ function ProjectDashboard() {
           completionRate
         });
         
-        setDueTasks(dueSoonTasks.slice(0, 5)); // Show max 5 upcoming tasks
+        setDueTasks(dueSoonTasks.slice(0, 5));
+
+        // NEW: Prepare chart data
+        if (allMembers.length > 0 && tasks.length > 0) {
+          prepareChartData(tasks, allMembers);
+        }
+
       } catch (error) {
         console.log('Could not fetch tasks:', error);
       }
@@ -524,79 +716,70 @@ function ProjectDashboard() {
     }
   }, [projectId]);
 
-  // Handle project completion - refresh data when project is marked complete
+  // Handle project completion
   const handleProjectCompleted = useCallback(async () => {
     console.log('Project completed! Refreshing data...');
     
     try {
-      // Refresh project data to update status
       await fetchDashboardData();
-      
-      // Optionally, you can also add a success notification here
-      // For example, if you have a notification context:
-      // showNotification('success', 'Project has been marked as complete!');
     } catch (error) {
       console.error('Error refreshing project data:', error);
     }
   }, [fetchDashboardData]);
 
-  // Mock member activity (in real app, this would come from activity logs)
-  // Fetch member activity using backend API
-const fetchMemberActivity = useCallback(async () => {
-  try {
-    setLoadingActivity(true);
-    
-    console.log('🔍 Fetching activity for project:', projectId);
-    
-    // Fetch real activity data from backend
-    const response = await projectService.getRecentActivity(projectId, 10);
-    
-    console.log('📦 Activity API Response:', response);
-    
-    if (response.success) {
-      console.log('✅ Activities found:', response.data.activities.length);
+  // Fetch member activity
+  const fetchMemberActivity = useCallback(async () => {
+    try {
+      setLoadingActivity(true);
       
-      // Transform the data to match the expected format
-      const formattedActivities = response.data.activities.map(activity => {
-        console.log('🔄 Processing activity:', activity);
-        
-        // Parse activity_data to get action and target
-        const activityData = activity.activity_data || {};
-        const action = activityData.action || 'performed action';
-        const target = activityData.target || '';
-        
-        return {
-          id: activity.id,
-          user: activity.users || { full_name: 'Unknown User', username: 'unknown' },
-          action: action,
-          target: target,
-          timestamp: new Date(activity.created_at),
-          type: activity.activity_type
-        };
-      });
+      console.log('🔍 Fetching activity for project:', projectId);
       
-      console.log('✨ Formatted activities:', formattedActivities);
-      setMemberActivity(formattedActivities);
-    } else {
-      console.log('❌ API returned success: false');
+      const response = await projectService.getRecentActivity(projectId, 10);
+      
+      console.log('📦 Activity API Response:', response);
+      
+      if (response.success) {
+        console.log('✅ Activities found:', response.data.activities.length);
+        
+        const formattedActivities = response.data.activities.map(activity => {
+          console.log('🔄 Processing activity:', activity);
+          
+          const activityData = activity.activity_data || {};
+          const action = activityData.action || 'performed action';
+          const target = activityData.target || '';
+          
+          return {
+            id: activity.id,
+            user: activity.users || { full_name: 'Unknown User', username: 'unknown' },
+            action: action,
+            target: target,
+            timestamp: new Date(activity.created_at),
+            type: activity.activity_type
+          };
+        });
+        
+        console.log('✨ Formatted activities:', formattedActivities);
+        setMemberActivity(formattedActivities);
+      } else {
+        console.log('❌ API returned success: false');
+        setMemberActivity([]);
+      }
+    } catch (error) {
+      console.error('💥 Error fetching member activity:', error);
+      console.error('Error details:', error.response?.data || error.message);
       setMemberActivity([]);
+    } finally {
+      setLoadingActivity(false);
     }
-  } catch (error) {
-    console.error('💥 Error fetching member activity:', error);
-    console.error('Error details:', error.response?.data || error.message);
-    setMemberActivity([]);
-  } finally {
-    setLoadingActivity(false);
-  }
-}, [projectId]);
+  }, [projectId]);
 
   useEffect(() => {
-  fetchDashboardData();
-}, [fetchDashboardData]);
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
-useEffect(() => {
-  fetchMemberActivity();
-}, [fetchMemberActivity]);
+  useEffect(() => {
+    fetchMemberActivity();
+  }, [fetchMemberActivity]);
 
   // Helper functions
   const formatTimeAgo = (timestamp) => {
@@ -623,23 +806,23 @@ useEffect(() => {
   };
 
   const getActivityIcon = (type) => {
-  switch(type) {
-    case 'task_completed':
-      return <CheckCircle size={20} color="#10b981" />;
-    case 'task_created':
-      return <FileText size={20} color="#3b82f6" />;
-    case 'task_started':
-      return <Clock size={20} color="#f59e0b" />;
-    case 'project_updated':
-      return <Edit size={20} color="#8b5cf6" />;
-    case 'member_joined':
-      return <UserPlus size={20} color="#06b6d4" />;
-    case 'file_uploaded':
-      return <Upload size={20} color="#ec4899" />;
-    default:
-      return <Clock size={20} color="#9ca3af" />;
-  }
-};
+    switch(type) {
+      case 'task_completed':
+        return <CheckCircle size={20} color="#10b981" />;
+      case 'task_created':
+        return <FileText size={20} color="#3b82f6" />;
+      case 'task_started':
+        return <Clock size={20} color="#f59e0b" />;
+      case 'project_updated':
+        return <Edit size={20} color="#8b5cf6" />;
+      case 'member_joined':
+        return <UserPlus size={20} color="#06b6d4" />;
+      case 'file_uploaded':
+        return <Upload size={20} color="#ec4899" />;
+      default:
+        return <Clock size={20} color="#9ca3af" />;
+    }
+  };
 
   const getPriorityColor = (priority) => {
     switch (priority) {
@@ -651,14 +834,116 @@ useEffect(() => {
     }
   };
 
+  // NEW: Chart options
+  const barChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top',
+        labels: {
+          color: '#d1d5db',
+          font: { size: 12 }
+        }
+      },
+      title: {
+        display: true,
+        text: 'Member Contribution Analysis',
+        color: '#ffffff',
+        font: { size: 16, weight: 'bold' }
+      },
+      tooltip: {
+        backgroundColor: 'rgba(26, 28, 32, 0.95)',
+        titleColor: '#ffffff',
+        bodyColor: '#d1d5db',
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderWidth: 1
+      }
+    },
+    scales: {
+      x: {
+        stacked: true,
+        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+        ticks: { color: '#9ca3af' }
+      },
+      y: {
+        stacked: true,
+        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+        ticks: { color: '#9ca3af' }
+      }
+    }
+  };
+
+  const doughnutChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'right',
+        labels: {
+          color: '#d1d5db',
+          font: { size: 12 },
+          padding: 15
+        }
+      },
+      title: {
+        display: true,
+        text: 'Task Status Distribution',
+        color: '#ffffff',
+        font: { size: 16, weight: 'bold' }
+      },
+      tooltip: {
+        backgroundColor: 'rgba(26, 28, 32, 0.95)',
+        titleColor: '#ffffff',
+        bodyColor: '#d1d5db',
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderWidth: 1
+      }
+    }
+  };
+
+  const lineChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false
+      },
+      title: {
+        display: true,
+        text: 'Completion Progress (Last 7 Days)',
+        color: '#ffffff',
+        font: { size: 16, weight: 'bold' }
+      },
+      tooltip: {
+        backgroundColor: 'rgba(26, 28, 32, 0.95)',
+        titleColor: '#ffffff',
+        bodyColor: '#d1d5db',
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderWidth: 1
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+        ticks: { color: '#9ca3af' }
+      },
+      y: {
+        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+        ticks: { 
+          color: '#9ca3af',
+          stepSize: 1
+        }
+      }
+    }
+  };
+
   const styles = {
-    // NEW: Completion section - inside container, between analytics and announcements
     completionSection: {
       position: 'relative',
       zIndex: 10,
       marginBottom: '30px'
     },
-    // NEW: Toggle button styles
     toggleButton: {
       position: 'fixed',
       top: '20px',
@@ -764,6 +1049,57 @@ useEffect(() => {
       height: '100%',
       background: 'linear-gradient(90deg, #10b981, #059669)',
       transition: 'width 0.3s ease'
+    },
+    // NEW: Charts section styles
+    chartsSection: {
+      position: 'relative',
+      zIndex: 10,
+      marginBottom: '30px'
+    },
+    sectionTitle: {
+      fontSize: '24px',
+      fontWeight: 'bold',
+      color: 'white',
+      marginBottom: '20px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px'
+    },
+    chartsGrid: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+      gap: '20px',
+      marginBottom: '20px'
+    },
+    chartCard: {
+      background: 'linear-gradient(135deg, rgba(26, 28, 32, 0.95), rgba(15, 17, 22, 0.90))',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      borderRadius: '16px',
+      padding: '20px',
+      backdropFilter: 'blur(20px)',
+      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+      minHeight: '350px'
+    },
+    chartCardFull: {
+      background: 'linear-gradient(135deg, rgba(26, 28, 32, 0.95), rgba(15, 17, 22, 0.90))',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      borderRadius: '16px',
+      padding: '20px',
+      backdropFilter: 'blur(20px)',
+      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+      minHeight: '300px'
+    },
+    chartContainer: {
+      height: '100%',
+      minHeight: '300px'
+    },
+    emptyChart: {
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '300px',
+      color: '#9ca3af'
     },
     contentGrid: {
       position: 'relative',
@@ -921,7 +1257,6 @@ useEffect(() => {
   if (loading) {
     return (
       <>
-        {/* Sidebar Toggle Button - OUTSIDE CONTAINER */}
         <button
           style={styles.toggleButton}
           onClick={toggleSidebar}
@@ -973,7 +1308,6 @@ useEffect(() => {
   if (!project) {
     return (
       <>
-        {/* Sidebar Toggle Button */}
         <button
           style={styles.toggleButton}
           onClick={toggleSidebar}
@@ -1005,7 +1339,6 @@ useEffect(() => {
 
   return (
     <>
-      {/* Sidebar Toggle Button - OUTSIDE CONTAINER */}
       <button
         style={styles.toggleButton}
         onClick={toggleSidebar}
@@ -1043,7 +1376,7 @@ useEffect(() => {
           <div style={styles.analyticsCard}>
             <div style={styles.analyticsHeader}>
               <h3 style={styles.analyticsTitle}>Project Progress</h3>
-              <span style={styles.analyticsIcon}>📈</span>
+              <TrendingUp size={24} style={{ color: '#10b981' }} />
             </div>
             <div style={styles.analyticsValue}>{analytics.completionRate}%</div>
             <div style={styles.analyticsSubtext}>
@@ -1062,7 +1395,7 @@ useEffect(() => {
           <div style={styles.analyticsCard}>
             <div style={styles.analyticsHeader}>
               <h3 style={styles.analyticsTitle}>Active Tasks</h3>
-              <span style={styles.analyticsIcon}>⚡</span>
+              <BarChart3 size={24} style={{ color: '#3b82f6' }} />
             </div>
             <div style={styles.analyticsValue}>{analytics.activeTasks}</div>
             <div style={styles.analyticsSubtext}>
@@ -1073,7 +1406,7 @@ useEffect(() => {
           <div style={styles.analyticsCard}>
             <div style={styles.analyticsHeader}>
               <h3 style={styles.analyticsTitle}>Overdue Tasks</h3>
-              <span style={styles.analyticsIcon}>⚠️</span>
+              <Clock size={24} style={{ color: analytics.overdueTasksCount > 0 ? '#ef4444' : '#10b981' }} />
             </div>
             <div style={{
               ...styles.analyticsValue,
@@ -1087,7 +1420,7 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* Project Completion Section - INSIDE CONTAINER */}
+        {/* Project Completion Section */}
         {project && project.maximum_members > 1 && project.status !== 'completed' && (
           <div style={styles.completionSection}>
             <ProjectCompletionButton
@@ -1098,6 +1431,58 @@ useEffect(() => {
             />
           </div>
         )}
+
+        {/* NEW: Charts Section */}
+        <div style={styles.chartsSection}>
+          <h2 style={styles.sectionTitle}>
+            <BarChart3 size={24} />
+            Advanced Analytics
+          </h2>
+
+          <div style={styles.chartsGrid}>
+            {/* Member Contribution Chart */}
+            <div style={styles.chartCard}>
+              {memberContributionData && memberContributionData.labels.length > 0 ? (
+                <div style={styles.chartContainer}>
+                  <Bar data={memberContributionData} options={barChartOptions} />
+                </div>
+              ) : (
+                <div style={styles.emptyChart}>
+                  <Users size={48} style={{ color: '#6b7280', marginBottom: '10px' }} />
+                  <p>No member contribution data available</p>
+                </div>
+              )}
+            </div>
+
+            {/* Task Status Distribution */}
+            <div style={styles.chartCard}>
+              {taskStatusData && taskStatusData.labels.length > 0 ? (
+                <div style={styles.chartContainer}>
+                  <Doughnut data={taskStatusData} options={doughnutChartOptions} />
+                </div>
+              ) : (
+                <div style={styles.emptyChart}>
+                  <BarChart3 size={48} style={{ color: '#6b7280', marginBottom: '10px' }} />
+                  <p>No task status data available</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Progress Timeline */}
+          <div style={styles.chartCardFull}>
+            {progressTimelineData && progressTimelineData.labels.length > 0 ? (
+              <div style={styles.chartContainer}>
+                <Line data={progressTimelineData} options={lineChartOptions} />
+              </div>
+            ) : (
+              <div style={styles.emptyChart}>
+                <TrendingUp size={48} style={{ color: '#6b7280', marginBottom: '10px' }} />
+                <p>No timeline data available</p>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Announcements */}
         <div style={styles.announcementsSection}>
@@ -1177,7 +1562,6 @@ useEffect(() => {
             </div>
           </div>
           
-
           {/* Right Column */}
           <div>
             <div style={styles.card}>
