@@ -40,6 +40,65 @@ export const taskService = {
     }
   },
 
+  /**
+ * Submit code for a task
+ * @param {string} projectId - Project ID
+ * @param {string} taskId - Task ID  
+ * @param {Object} submissionData - Code submission data
+ * @returns {Promise} API response
+ */
+submitTaskCode: async (projectId, taskId, submissionData) => {
+  try {
+    console.log('🔄 TaskService: Submitting code for task:', taskId);
+    console.log('📝 TaskService: Submission data:', {
+      codeLength: submissionData.submitted_code?.length
+    });
+    
+    const response = await api.post(
+      `/projects/${projectId}/tasks/${taskId}/submit`,
+      submissionData
+    );
+    
+    console.log('✅ TaskService: Code submitted successfully');
+    console.log('📊 Evaluation score:', response.data?.data?.evaluation?.score);
+    
+    return response;
+  } catch (error) {
+    console.error('💥 TaskService: Submit code error:', error.response?.data || error.message);
+    
+    // Enhance error message for better user feedback
+    if (error.response?.data?.message) {
+      error.message = error.response.data.message;
+    } else if (error.response?.status === 400) {
+      error.message = 'Invalid code submission. Please ensure your code is not empty.';
+    } else if (error.response?.status === 404) {
+      error.message = 'Task not found';
+    } else {
+      error.message = 'Failed to submit code. Please try again.';
+    }
+    
+    throw error;
+  }
+},
+
+/**
+ * Get all submissions for a task
+ * @param {string} projectId - Project ID
+ * @param {string} taskId - Task ID
+ * @returns {Promise} API response with submissions
+ */
+getTaskSubmissions: async (projectId, taskId) => {
+  try {
+    console.log('🔄 TaskService: Fetching submissions for task:', taskId);
+    const response = await api.get(`/projects/${projectId}/tasks/${taskId}/submissions`);
+    console.log('✅ TaskService: Submissions fetched successfully');
+    return response.data;
+  } catch (error) {
+    console.error('💥 TaskService: Get submissions error:', error.response?.data || error.message);
+    throw error;
+  }
+},
+
   // Get a specific task
   getTask: async (projectId, taskId) => {
     try {

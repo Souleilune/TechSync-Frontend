@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { taskService } from '../../services/taskService';
 import { projectService } from '../../services/projectService';
 import CommentsContainer from '../../components/Comments/CommentsContainer';
+import { Code, Send, CheckCircle, AlertCircle, History, User, Clock, X, Edit2 } from 'lucide-react';
 
 const TaskDetail = () => {
     const { projectId, taskId } = useParams();
@@ -15,6 +16,11 @@ const TaskDetail = () => {
     const [error, setError] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
     const [editForm, setEditForm] = useState({});
+    const [submissionHistory, setSubmissionHistory] = useState([]);
+    const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+    const [selectedSubmission, setSelectedSubmission] = useState(null);
+    const [showSubmissionModal, setShowSubmissionModal] = useState(false);
+    
 
     // Use useCallback to fix dependency warnings
     const fetchTaskData = useCallback(async () => {
@@ -54,6 +60,7 @@ const TaskDetail = () => {
         if (projectId && taskId) {
             fetchTaskData();
             fetchProjectData();
+            fetchSubmissions();
         }
     }, [projectId, taskId, fetchTaskData, fetchProjectData]);
 
@@ -68,6 +75,89 @@ const TaskDetail = () => {
             alert('Failed to update task');
         }
     };
+
+    const fetchSubmissions = useCallback(async () => {
+    try {
+        setLoadingSubmissions(true);
+        const response = await taskService.getTaskSubmissions(projectId, taskId);
+        
+        if (response && response.data && response.data.submissions) {
+            setSubmissionHistory(response.data.submissions);
+            console.log('✅ Loaded submissions:', response.data.submissions);
+        }
+    } catch (error) {
+        console.error('Error fetching submissions:', error);
+        // Don't show error to user, just log it
+        // Submission history will show "No submissions yet"
+    } finally {
+        setLoadingSubmissions(false);
+    }
+}, [projectId, taskId]);
+
+    const handleCodeSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!codeSubmission.trim()) {
+        setEvaluationResult({
+            score: 0,
+            feedback: '⚠️ Please enter your code before submitting.',
+            details: { languageName: 'N/A' }
+        });
+        return;
+    }
+
+    try {
+        setSubmitting(true);
+        setEvaluationResult(null);
+        
+        const response = await taskService.submitTaskCode(projectId, taskId, {
+            submitted_code: codeSubmission
+        });
+
+        const evaluation = response.data.data?.evaluation || response.data.evaluation;
+        
+        if (evaluation) {
+            setEvaluationResult(evaluation);
+            await fetchTaskData();
+            await fetchSubmissions(); // ADD THIS - Refresh submission list
+            setCodeSubmission('');
+        }
+    } catch (error) {
+        console.error('❌ Error:', error);
+        setEvaluationResult({
+            score: 0,
+            feedback: `❌ ${error.response?.data?.message || 'Failed to submit'}`,
+            details: { languageName: 'Error' }
+        });
+    } finally {
+        setSubmitting(false);
+    }
+};
+
+const handleViewSubmission = (submission) => {
+    setSelectedSubmission(submission);
+    setShowSubmissionModal(true);
+};
+
+const handleEditSubmission = (submission) => {
+    setCodeSubmission(submission.submitted_code);
+    setShowSubmissionModal(false);
+    // Scroll to code editor
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+const formatDateTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+};
+
+    
 
     const handleStatusChange = async (newStatus) => {
     try {
@@ -418,6 +508,495 @@ const TaskDetail = () => {
                         </div>
                     )}
                 </div>
+                <div style={{
+    ...styles.description,
+    marginTop: '24px'
+}}>
+
+                    <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        marginBottom: '16px'
+    }}>
+        <Code size={20} style={{ color: '#00D4FF' }} />
+        <h3 style={{ margin: 0, color: '#00D4FF'}}>Submit Your Code</h3>
+    </div>
+
+    <form onSubmit={handleCodeSubmit}>
+        <div style={{
+            marginBottom: '16px'
+        }}>
+            <textarea
+                value={codeSubmission}
+                onChange={(e) => setCodeSubmission(e.target.value)}
+                placeholder="Paste your code here... The system will provide syntax guidance based on the project's programming language."
+                style={{
+                    width: '100%',
+                    minHeight: '300px',
+                    padding: '16px',
+                    backgroundColor: '#1a1d24',
+                    border: '1px solid #30363d',
+                    borderRadius: '8px',
+                    color: '#e6edf3',
+                    fontSize: '14px',
+                    fontFamily: 'Monaco, Courier, monospace',
+                    resize: 'vertical',
+                    lineHeight: '1.6'
+                }}
+                disabled={submitting}
+            />
+        </div>
+
+        <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px'
+        }}>
+            <button
+                type="submit"
+                disabled={submitting || !codeSubmission.trim()}
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '12px 24px',
+                    backgroundColor: submitting || !codeSubmission.trim() ? '#444' : '#00D4FF',
+                    color: submitting || !codeSubmission.trim() ? '#888' : '#0F1116',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: submitting || !codeSubmission.trim() ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.3s ease'
+                }}
+            >
+                <Send size={16} />
+                {submitting ? 'Evaluating...' : 'Submit Code'}
+            </button>
+
+            <div style={{
+                fontSize: '12px',
+                color: '#8b949e',
+                flex: 1
+            }}>
+                <AlertCircle size={14} style={{ display: 'inline', marginRight: '4px' }} />
+                Code will be evaluated for syntax compliance - it will NOT reject your submission, only provide quality feedback.
+            </div>
+        </div>
+    </form>
+
+    {/* Evaluation Result Display */}
+    {evaluationResult && (
+        <div style={{
+            marginTop: '20px',
+            padding: '16px',
+            backgroundColor: evaluationResult.score >= 70 ? 'rgba(46, 160, 67, 0.1)' : 'rgba(248, 113, 113, 0.1)',
+            border: `1px solid ${evaluationResult.score >= 70 ? '#2ea043' : '#f87171'}`,
+            borderRadius: '8px'
+        }}>
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginBottom: '12px'
+            }}>
+                {evaluationResult.score >= 70 ? (
+                    <CheckCircle size={20} style={{ color: '#2ea043' }} />
+                ) : (
+                    <AlertCircle size={20} style={{ color: '#f87171' }} />
+                )}
+                <h4 style={{
+                    margin: 0,
+                    color: evaluationResult.score >= 70 ? '#2ea043' : '#f87171'
+                }}>
+                    Code Quality Score: {evaluationResult.score}/100
+                </h4>
+            </div>
+            
+            <p style={{
+                margin: '8px 0',
+                fontSize: '14px',
+                lineHeight: '1.6',
+                color: '#e6edf3'
+            }}>
+                {evaluationResult.feedback}
+            </p>
+
+            {evaluationResult.details && (
+                <div style={{
+                    marginTop: '12px',
+                    fontSize: '13px',
+                    color: '#8b949e'
+                }}>
+                    <div><strong>Language:</strong> {evaluationResult.details.languageName}</div>
+                    {evaluationResult.details.foundFeatures && evaluationResult.details.foundFeatures.length > 0 && (
+                        <div style={{ marginTop: '8px' }}>
+                            <strong>Strengths Found:</strong>
+                            <ul style={{ margin: '4px 0', paddingLeft: '20px' }}>
+                                {evaluationResult.details.foundFeatures.slice(0, 5).map((feature, index) => (
+                                    <li key={index}>{feature}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    )}
+</div>
+
+<div style={{
+    marginTop: '32px',
+    padding: '24px',
+    backgroundColor: '#1a1d24',
+    borderRadius: '12px',
+    border: '1px solid #30363d'
+}}>
+    <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        marginBottom: '16px'
+    }}>
+        <History size={20} style={{ color: '#00D4FF' }} />
+        <h3 style={{ margin: 0, color: '#e6edf3' }}>Submission History</h3>
+        <span style={{
+            marginLeft: 'auto',
+            fontSize: '14px',
+            color: '#8b949e'
+        }}>
+            {submissionHistory.length} {submissionHistory.length === 1 ? 'submission' : 'submissions'}
+        </span>
+    </div>
+
+    {loadingSubmissions ? (
+        <div style={{ textAlign: 'center', padding: '20px', color: '#8b949e' }}>
+            Loading submissions...
+        </div>
+    ) : submissionHistory.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '20px', color: '#8b949e' }}>
+            No submissions yet. Be the first to submit code!
+        </div>
+    ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {submissionHistory.map((submission) => (
+                <div
+                    key={submission.id}
+                    style={{
+                        padding: '16px',
+                        backgroundColor: '#0d1117',
+                        border: '1px solid #30363d',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = '#00D4FF';
+                        e.currentTarget.style.transform = 'translateX(4px)';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = '#30363d';
+                        e.currentTarget.style.transform = 'translateX(0)';
+                    }}
+                    onClick={() => handleViewSubmission(submission)}
+                >
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        marginBottom: '8px'
+                    }}>
+                        <div style={{ flex: 1 }}>
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                marginBottom: '4px'
+                            }}>
+                                <User size={16} style={{ color: '#8b949e' }} />
+                                <span style={{
+                                    color: '#e6edf3',
+                                    fontWeight: '600',
+                                    fontSize: '14px'
+                                }}>
+                                    {submission.users?.full_name || submission.users?.username || 'Unknown User'}
+                                </span>
+                            </div>
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                fontSize: '12px',
+                                color: '#8b949e'
+                            }}>
+                                <Clock size={14} />
+                                {formatDateTime(submission.submitted_at)}
+                            </div>
+                        </div>
+
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px'
+                        }}>
+                            {submission.automated_review_score !== null && (
+                                <div style={{
+                                    padding: '4px 12px',
+                                    backgroundColor: submission.automated_review_score >= 70 
+                                        ? 'rgba(46, 160, 67, 0.1)' 
+                                        : 'rgba(248, 113, 113, 0.1)',
+                                    border: `1px solid ${submission.automated_review_score >= 70 ? '#2ea043' : '#f87171'}`,
+                                    borderRadius: '12px',
+                                    fontSize: '12px',
+                                    fontWeight: '600',
+                                    color: submission.automated_review_score >= 70 ? '#2ea043' : '#f87171'
+                                }}>
+                                    Score: {submission.automated_review_score}
+                                </div>
+                            )}
+                            
+                            <div style={{
+                                padding: '4px 12px',
+                                backgroundColor: submission.status === 'approved' 
+                                    ? 'rgba(46, 160, 67, 0.1)' 
+                                    : submission.status === 'rejected'
+                                    ? 'rgba(248, 113, 113, 0.1)'
+                                    : 'rgba(255, 193, 7, 0.1)',
+                                border: `1px solid ${
+                                    submission.status === 'approved' 
+                                        ? '#2ea043' 
+                                        : submission.status === 'rejected'
+                                        ? '#f87171'
+                                        : '#ffc107'
+                                }`,
+                                borderRadius: '12px',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                color: submission.status === 'approved' 
+                                    ? '#2ea043' 
+                                    : submission.status === 'rejected'
+                                    ? '#f87171'
+                                    : '#ffc107',
+                                textTransform: 'capitalize'
+                            }}>
+                                {submission.status}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style={{
+                        marginTop: '8px',
+                        padding: '8px',
+                        backgroundColor: '#161b22',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        color: '#8b949e',
+                        fontFamily: 'Monaco, Courier, monospace',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                    }}>
+                        {submission.submitted_code.substring(0, 100)}...
+                    </div>
+                </div>
+            ))}
+        </div>
+    )}
+</div>
+
+{/* Submission Detail Modal */}
+{showSubmissionModal && selectedSubmission && (
+    <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: '20px'
+    }}
+    onClick={() => setShowSubmissionModal(false)}
+    >
+        <div style={{
+            backgroundColor: '#0d1117',
+            borderRadius: '12px',
+            maxWidth: '900px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            border: '1px solid #30363d'
+        }}
+        onClick={(e) => e.stopPropagation()}
+        >
+            {/* Modal Header */}
+            <div style={{
+                padding: '20px 24px',
+                borderBottom: '1px solid #30363d',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                position: 'sticky',
+                top: 0,
+                backgroundColor: '#0d1117',
+                zIndex: 1
+            }}>
+                <div>
+                    <h3 style={{ margin: 0, color: '#e6edf3', marginBottom: '4px' }}>
+                        Code Submission
+                    </h3>
+                    <div style={{ fontSize: '14px', color: '#8b949e' }}>
+                        By {selectedSubmission.users?.full_name || 'Unknown'} • {formatDateTime(selectedSubmission.submitted_at)}
+                    </div>
+                </div>
+                <button
+                    onClick={() => setShowSubmissionModal(false)}
+                    style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#8b949e',
+                        cursor: 'pointer',
+                        padding: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}
+                >
+                    <X size={24} />
+                </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '24px' }}>
+                {/* Score and Status */}
+                <div style={{
+                    display: 'flex',
+                    gap: '12px',
+                    marginBottom: '20px',
+                    flexWrap: 'wrap'
+                }}>
+                    {selectedSubmission.automated_review_score !== null && (
+                        <div style={{
+                            padding: '12px 16px',
+                            backgroundColor: selectedSubmission.automated_review_score >= 70 
+                                ? 'rgba(46, 160, 67, 0.1)' 
+                                : 'rgba(248, 113, 113, 0.1)',
+                            border: `1px solid ${selectedSubmission.automated_review_score >= 70 ? '#2ea043' : '#f87171'}`,
+                            borderRadius: '8px',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            color: selectedSubmission.automated_review_score >= 70 ? '#2ea043' : '#f87171'
+                        }}>
+                            Quality Score: {selectedSubmission.automated_review_score}/100
+                        </div>
+                    )}
+                    
+                    <div style={{
+                        padding: '12px 16px',
+                        backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                        border: '1px solid #ffc107',
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: '#ffc107',
+                        textTransform: 'capitalize'
+                    }}>
+                        Status: {selectedSubmission.status}
+                    </div>
+                </div>
+
+                {/* Feedback */}
+                {selectedSubmission.automated_feedback && (
+                    <div style={{
+                        marginBottom: '20px',
+                        padding: '16px',
+                        backgroundColor: '#161b22',
+                        borderRadius: '8px',
+                        border: '1px solid #30363d'
+                    }}>
+                        <h4 style={{ margin: '0 0 8px 0', color: '#e6edf3', fontSize: '14px' }}>
+                            Automated Feedback
+                        </h4>
+                        <p style={{ margin: 0, color: '#8b949e', fontSize: '14px', lineHeight: '1.6' }}>
+                            {selectedSubmission.automated_feedback}
+                        </p>
+                    </div>
+                )}
+
+                {/* Code */}
+                <div style={{
+                    marginBottom: '20px'
+                }}>
+                    <h4 style={{ margin: '0 0 12px 0', color: '#e6edf3', fontSize: '14px' }}>
+                        Submitted Code
+                    </h4>
+                    <pre style={{
+                        margin: 0,
+                        padding: '16px',
+                        backgroundColor: '#161b22',
+                        borderRadius: '8px',
+                        border: '1px solid #30363d',
+                        color: '#e6edf3',
+                        fontSize: '13px',
+                        fontFamily: 'Monaco, Courier, monospace',
+                        overflow: 'auto',
+                        maxHeight: '400px',
+                        lineHeight: '1.6'
+                    }}>
+{selectedSubmission.submitted_code}
+                    </pre>
+                </div>
+
+                {/* Actions */}
+                <div style={{
+                    display: 'flex',
+                    gap: '12px',
+                    justifyContent: 'flex-end'
+                }}>
+                    <button
+                        onClick={() => handleEditSubmission(selectedSubmission)}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '10px 20px',
+                            backgroundColor: '#00D4FF',
+                            color: '#0F1116',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        <Edit2 size={16} />
+                        Load into Editor
+                    </button>
+                    <button
+                        onClick={() => setShowSubmissionModal(false)}
+                        style={{
+                            padding: '10px 20px',
+                            backgroundColor: '#21262d',
+                            color: '#e6edf3',
+                            border: '1px solid #30363d',
+                            borderRadius: '6px',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+)}
 
                 {/* Comments Section */}
                 <div style={styles.commentsSection}>
