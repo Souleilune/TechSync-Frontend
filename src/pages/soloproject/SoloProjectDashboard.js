@@ -260,62 +260,78 @@ function SoloProjectDashboard() {
   }, []);
 
   // NEW: Fetch challenge attempts for charts
-  const fetchChallengeData = useCallback(async () => {
-    try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-      const response = await fetch(`${apiUrl}/challenges/attempts/${projectId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+  // ✅ FIXED - Use the existing ChallengeAPI.getUserAttempts() method
+const fetchChallengeData = useCallback(async () => {
+  try {
+    console.log('📊 Fetching challenge data for project:', projectId);
+    
+    // Get all user attempts
+    const response = await ChallengeAPI.getUserAttempts({ 
+      page: 1, 
+      limit: 100 
+    });
+    
+    // Extract attempts array from response
+    const allAttempts = response?.data?.data?.attempts || response?.data?.attempts || [];
+    
+    // ✅ CRITICAL: Filter attempts for THIS solo project only
+    const projectAttempts = allAttempts.filter(a => a.project_id === projectId);
+    
+    console.log('📈 Found attempts:', {
+      total: allAttempts.length,
+      forThisProject: projectAttempts.length
+    });
+    
+    // Filter only passed attempts for statistics
+    const passedAttempts = projectAttempts.filter(a => a.status === 'passed');
+    
+    // Calculate statistics
+    const totalCompleted = passedAttempts.length;
+    const totalScore = passedAttempts.reduce((sum, a) => sum + (a.score || 0), 0);
+    const avgScore = totalCompleted > 0 ? Math.round(totalScore / totalCompleted) : 0;
+    
+    setChallengeStats({
+      totalChallenges: projectAttempts.length,
+      completedChallenges: totalCompleted,
+      averageScore: avgScore,
+      totalPoints: totalScore
+    });
+
+    // Prepare chart data - last 7 challenges
+    const recentAttempts = passedAttempts
+      .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at))
+      .slice(0, 7)
+      .reverse();
+    
+    if (recentAttempts.length > 0) {
+      setChallengePerformanceData({
+        labels: recentAttempts.map((_, idx) => `Challenge ${idx + 1}`),
+        datasets: [{
+          label: 'Challenge Score',
+          data: recentAttempts.map(a => a.score || 0),
+          backgroundColor: recentAttempts.map(a => 
+            (a.score || 0) >= 80 ? 'rgba(16, 185, 129, 0.8)' : 
+            (a.score || 0) >= 60 ? 'rgba(251, 191, 36, 0.8)' : 
+            'rgba(239, 68, 68, 0.8)'
+          ),
+          borderColor: recentAttempts.map(a => 
+            (a.score || 0) >= 80 ? 'rgba(16, 185, 129, 1)' : 
+            (a.score || 0) >= 60 ? 'rgba(251, 191, 36, 1)' : 
+            'rgba(239, 68, 68, 1)'
+          ),
+          borderWidth: 2
+        }]
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        const attempts = data.attempts || [];
-        
-        // Filter only passed attempts
-        const passedAttempts = attempts.filter(a => a.status === 'passed');
-        
-        // Calculate statistics
-        const totalCompleted = passedAttempts.length;
-        const totalScore = passedAttempts.reduce((sum, a) => sum + (a.score || 0), 0);
-        const avgScore = totalCompleted > 0 ? Math.round(totalScore / totalCompleted) : 0;
-        
-        setChallengeStats({
-          totalChallenges: attempts.length,
-          completedChallenges: totalCompleted,
-          averageScore: avgScore,
-          totalPoints: totalScore
-        });
-
-        // Prepare chart data - last 7 challenges
-        const recentAttempts = passedAttempts.slice(-7).reverse();
-        
-        if (recentAttempts.length > 0) {
-          setChallengePerformanceData({
-            labels: recentAttempts.map((_, idx) => `Challenge ${recentAttempts.length - idx}`),
-            datasets: [{
-              label: 'Challenge Score',
-              data: recentAttempts.map(a => a.score || 0),
-              backgroundColor: recentAttempts.map(a => 
-                (a.score || 0) >= 8 ? 'rgba(16, 185, 129, 0.8)' : 
-                (a.score || 0) >= 6 ? 'rgba(251, 191, 36, 0.8)' : 
-                'rgba(239, 68, 68, 0.8)'
-              ),
-              borderColor: recentAttempts.map(a => 
-                (a.score || 0) >= 8 ? 'rgba(16, 185, 129, 1)' : 
-                (a.score || 0) >= 6 ? 'rgba(251, 191, 36, 1)' : 
-                'rgba(239, 68, 68, 1)'
-              ),
-              borderWidth: 2
-            }]
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching challenge data:', error);
+    } else {
+      // No attempts yet - set empty state
+      setChallengePerformanceData(null);
     }
-  }, [projectId]);
+  } catch (error) {
+    console.error('❌ Error fetching challenge data:', error);
+    // Set empty state on error
+    setChallengePerformanceData(null);
+  }
+}, [projectId]);
 
   // NEW: Prepare goal distribution chart
   const prepareGoalDistribution = useCallback(async () => {
