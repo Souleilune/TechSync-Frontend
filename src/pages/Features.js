@@ -8,6 +8,8 @@ const Features = () => {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [activeFeature, setActiveFeature] = useState(0);
   const [isManualHover, setIsManualHover] = useState(false);
+  const handleLoginClick = () => navigate('/login');
+  const handleSignUpClick = () => navigate('/login?mode=signup');
 
   useEffect(() => {
     const handleMouseMove = (e) => {

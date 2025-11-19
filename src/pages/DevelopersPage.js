@@ -7,6 +7,8 @@ const DevelopersPage = () => {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [activeCard, setActiveCard] = useState(null);
   const [visibleCards, setVisibleCards] = useState([]);
+  const handleLoginClick = () => navigate('/login');
+  const handleSignUpClick = () => navigate('/login?mode=signup');
 
   // Mouse tracking effect
   useEffect(() => {

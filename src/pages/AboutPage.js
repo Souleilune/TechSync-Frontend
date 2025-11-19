@@ -6,6 +6,8 @@ import { Target, Handshake, TrendingUp, Microscope } from 'lucide-react';
 const About = () => {
   const navigate = useNavigate();
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const handleLoginClick = () => navigate('/login');
+  const handleSignUpClick = () => navigate('/login?mode=signup');
 
   useEffect(() => {
     const handleMouseMove = (e) => {
