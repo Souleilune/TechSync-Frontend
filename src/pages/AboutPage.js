@@ -482,18 +482,21 @@ const About = () => {
 
           /* Navigation hover animations - matching LandingPage and DevelopersPage */
           .nav-link:hover {
-            color: #1f2937 !important;
-            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.95) !important;
+            color: #1a1c20 !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            /* NO transform animation */
           }
-          
+
           .login-btn:hover {
             color: #ffffff !important;
-            transform: translateY(-2px);
+            /* NO transform animation */
           }
-          
+
           .signup-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+            background: linear-gradient(to right, #4F7FFF, #3b82f6) !important;
           }
           
           .primary-cta:hover {
@@ -821,40 +824,171 @@ const About = () => {
       <div style={styles.mouseEffect} />
       
       {/* Header */}
-      <header style={styles.header}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <img 
-            src="/images/logo/TechSyncLogo.png"
-            alt="TechSync Logo"
-            style={{
-              width: '40px',
-              height: '40px',
-              objectFit: 'contain'
-            }}
-          />
-          <span style={{
-            fontSize: '1.25rem',
-            fontWeight: 'bold',
-            letterSpacing: '-0.025em',
-            background: 'linear-gradient(135deg, #4b5563, #6b7280, #9ca3af, #eef0f4ff)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text'
-          }}>TechSync</span>
-        </div>
+     <header style={{
+  position: 'relative',
+  top: '20px',
+  left: '50%',
+  transform: 'translateX(-50%)',
+  width: 'calc(100% - 80px)',
+  maxWidth: '1400px',
+  zIndex: 1000,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '12px 32px',
+}}>
+  {/* Logo Section - NO BACKGROUND */}
+  <div style={{ 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: '0.75rem',
+    cursor: 'pointer'
+  }} onClick={() => navigate('/')}>
+    <img 
+      src="/images/logo/TechSyncLogo.png"
+      alt="TechSync Logo"
+      style={{
+        width: '40px',
+        height: '40px',
+        objectFit: 'contain'
+      }}
+    />
+    <span style={{
+      fontSize: '1.25rem',
+      fontWeight: 'bold',
+      letterSpacing: '-0.025em',
+      background: 'linear-gradient(135deg, #4b5563, #6b7280, #9ca3af, #eef0f4ff)',
+      WebkitBackgroundClip: 'text',
+      WebkitTextFillColor: 'transparent',
+      backgroundClip: 'text'
+    }}>TechSync</span>
+  </div>
 
-        <nav style={styles.nav}>
-          <span style={styles.navLink} className="nav-link" onClick={() => navigate('/')}>HOME</span>
-          <span style={styles.navLink} className="nav-link" onClick={() => navigate('/features')}>FEATURES</span>
-          <span style={styles.navLink} className="nav-link" onClick={() => navigate('/aboutpage')}>ABOUT</span>
-          <span style={styles.navLink} className="nav-link" onClick={() => navigate('/developerspage')}>DEVELOPERS</span>
-        </nav>
+  {/* Navigation Links - WITH CIRCULAR BACKGROUND */}
+  <nav style={{
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    background: 'rgba(255, 255, 255, 0.05)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    padding: '10px 16px',
+    borderRadius: '50px',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05)'
+  }}>
+    <span 
+      onClick={() => navigate('/')}
+      style={{
+        color: '#d1d5db',
+        textDecoration: 'none',
+        fontWeight: '500',
+        fontSize: '14px',
+        transition: 'all 0.3s ease',
+        cursor: 'pointer',
+        padding: '8px 20px',
+        borderRadius: '50px',
+        background: 'transparent'
+      }} 
+      className="nav-link"
+    >
+      HOME
+    </span>
+    <span 
+      onClick={() => navigate('/features')}
+      style={{
+        color: '#d1d5db',
+        textDecoration: 'none',
+        fontWeight: '500',
+        fontSize: '14px',
+        transition: 'all 0.3s ease',
+        cursor: 'pointer',
+        padding: '8px 20px',
+        borderRadius: '50px',
+        background: 'transparent'
+      }} 
+      className="nav-link"
+    >
+      FEATURES
+    </span>
+    <span 
+      onClick={() => navigate('/aboutpage')}
+      style={{
+        color: '#d1d5db',
+        textDecoration: 'none',
+        fontWeight: '500',
+        fontSize: '14px',
+        transition: 'all 0.3s ease',
+        cursor: 'pointer',
+        padding: '8px 20px',
+        borderRadius: '50px',
+        background: 'transparent'
+      }} 
+      className="nav-link"
+    >
+      ABOUT
+    </span>
+    <span 
+      onClick={() => navigate('/developerspage')}
+      style={{
+        color: '#d1d5db',
+        textDecoration: 'none',
+        fontWeight: '500',
+        fontSize: '14px',
+        transition: 'all 0.3s ease',
+        cursor: 'pointer',
+        padding: '8px 20px',
+        borderRadius: '50px',
+        background: 'transparent'
+      }} 
+      className="nav-link"
+    >
+      DEVELOPERS
+    </span>
+  </nav>
 
-        <div style={styles.authButtons}>
-          <button style={styles.loginBtn} className="login-btn" onClick={() => navigate('/login')}>Login</button>
-          <button style={styles.signupBtn} className="signup-btn" onClick={() => navigate('/login?mode=signup')}>Sign Up</button>
-        </div>
-      </header>
+  {/* Auth Buttons - NO BACKGROUND CONTAINER */}
+  <div style={{ 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: '12px' 
+  }}>
+    <button 
+      style={{
+        color: '#d1d5db',
+        background: 'transparent',
+        border: 'none',
+        fontWeight: '500',
+        cursor: 'pointer',
+        transition: 'all 0.3s ease',
+        padding: '8px 24px',
+        fontSize: '14px'
+      }} 
+      className="login-btn" 
+      onClick={handleLoginClick}
+    >
+      Login
+    </button>
+    <button 
+      style={{
+        background: 'linear-gradient(to right, #3b82f6, #2563eb)',
+        color: 'white',
+        border: 'none',
+        padding: '10px 28px',
+        borderRadius: '50px',
+        fontWeight: '600',
+        cursor: 'pointer',
+        transition: 'all 0.3s ease',
+        fontSize: '14px',
+        boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+      }} 
+      className="signup-btn" 
+      onClick={handleSignUpClick}
+    >
+      Sign Up
+    </button>
+  </div>
+</header>
 
       <main style={styles.main}>
         <div style={styles.container}>
