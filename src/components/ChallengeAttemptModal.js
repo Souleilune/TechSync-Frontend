@@ -32,12 +32,14 @@ const ChallengeAttemptModal = ({ isOpen, onClose, challenge, onComplete }) => {
       console.log('📝 Submitting with language:', languageName);
 
       // ✅ CORRECT - Uses language-based evaluator with proper field names
-      const response = await ChallengeAPI.submitSimpleChallenge({
+      // Don't include project_id if it's null (validation fails on null)
+      const payload = {
         challenge_id: challenge.id,
         submitted_code: code,
-        language: languageName,  // ✅ Backend expects 'language' as string name
-        project_id: null
-      });
+        language: languageName
+      };
+
+      const response = await ChallengeAPI.submitSimpleChallenge(payload);
 
       console.log('📦 Full response:', response);
 
