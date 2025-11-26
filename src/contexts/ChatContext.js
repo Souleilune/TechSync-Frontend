@@ -24,6 +24,8 @@ export const ChatProvider = ({ children }) => {
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [typingUsers, setTypingUsers] = useState({});
   const [loading, setLoading] = useState(false);
+  const [isInVideoCall, setIsInVideoCall] = useState(false);
+  const [videoCallRoom, setVideoCallRoom] = useState(null);
 
   // Initialize socket connection
   useEffect(() => {
@@ -243,6 +245,20 @@ export const ChatProvider = ({ children }) => {
     }
   }, [socket, connected, currentProject]);
 
+  const startVideoCall = useCallback((roomId) => {
+  if (!socket || !connected || !currentProject) {
+    console.error('❌ Cannot start video call: socket not ready');
+    return;
+  }
+  setIsInVideoCall(true);
+  setVideoCallRoom(roomId);
+}, [socket, connected, currentProject]);
+
+const endVideoCall = useCallback(() => {
+  setIsInVideoCall(false);
+  setVideoCallRoom(null);
+}, []);
+
   // Fetch chat rooms for project (only if user is member)
   const fetchChatRooms = useCallback(async (projectId) => {
     try {
@@ -368,7 +384,11 @@ export const ChatProvider = ({ children }) => {
     fetchChatRooms,
     fetchMessages,
     createChatRoom,
-    clearMessages
+    clearMessages,
+    isInVideoCall,
+    videoCallRoom,
+    startVideoCall,
+    endVideoCall
   };
 
   return (

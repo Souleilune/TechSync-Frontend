@@ -2,12 +2,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useChat } from '../../contexts/ChatContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Send, Reply, Edit3, Trash2, X } from 'lucide-react';
+import { Send, Reply, Edit3, Trash2, X, Video, MessageCircle } from 'lucide-react';
+import VideoCall from './VideoCall';
 
 const ChatInterface = ({ projectId }) => {
   const { user } = useAuth();
   const {
+    socket,
     connected,
+    currentProject,
     chatRooms,
     messages,
     activeRoom,
@@ -23,7 +26,11 @@ const ChatInterface = ({ projectId }) => {
     stopTyping,
     fetchChatRooms,
     fetchMessages,
-    createChatRoom
+    createChatRoom,
+    isInVideoCall,
+    videoCallRoom,
+    startVideoCall,
+    endVideoCall
   } = useChat();
 
   const [messageInput, setMessageInput] = useState('');
@@ -365,6 +372,58 @@ const ChatInterface = ({ projectId }) => {
       }}>
         {activeRoomData ? (
           <>
+          <div style={{ 
+      padding: '16px 20px',
+      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: 'rgba(26, 28, 32, 0.8)',
+      flexShrink: 0
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <MessageCircle size={20} color="#3b82f6" />
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: 'white' }}>
+          #{activeRoomData.name}
+        </h3>
+        
+        {/* Video Call Button */}
+        <button
+          onClick={() => startVideoCall(activeRoom)}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '8px',
+            border: '1px solid rgba(59, 130, 246, 0.3)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            color: '#3b82f6',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '14px',
+            fontWeight: '500',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.backgroundColor = 'rgba(59, 130, 246, 0.2)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+          }}
+          title="Start video call"
+        >
+          <Video size={16} />
+          Video Call
+        </button>
+      </div>
+
+      {/* Online users count */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{ fontSize: '14px', color: '#9ca3af' }}>
+          {onlineUsers.length} online
+        </span>
+      </div>
+    </div>
             {/* Messages Area */}
             <div style={{ 
               flex: 1, 
@@ -1040,6 +1099,16 @@ const ChatInterface = ({ projectId }) => {
           background: rgba(255, 255, 255, 0.5);
         }
       `}</style>
+      {isInVideoCall && videoCallRoom && (
+        <VideoCall
+          socket={socket}
+          roomId={videoCallRoom}
+          projectId={currentProject}
+          currentUser={user}
+          onEndCall={endVideoCall}
+          isInitiator={true}
+        />
+      )}
     </div>
   );
 };
