@@ -1,4 +1,5 @@
 // frontend/src/components/ChallengeAttemptModal.js
+// PRODUCTION-READY VERSION - Bulletproof error handling
 import React, { useState } from 'react';
 import { X, Code, Send, CheckCircle, XCircle, Loader, AlertCircle } from 'lucide-react';
 import ChallengeAPI from '../services/challengeAPI';
@@ -20,7 +21,13 @@ const ChallengeAttemptModal = ({ isOpen, onClose, challenge, onComplete }) => {
       setError('');
       setResult(null);
 
-      // ✅ CORRECT
+      console.log('📝 Submitting challenge with languageBasedCodeEvaluator:', {
+        challenge_id: challenge.id,
+        language: challenge.programming_languages?.name || 'JavaScript',
+        code_length: code.length
+      });
+
+      // ✅ Call the API
       const response = await ChallengeAPI.submitSimpleChallenge({
         challenge_id: challenge.id,
         submitted_code: code,
@@ -28,24 +35,83 @@ const ChallengeAttemptModal = ({ isOpen, onClose, challenge, onComplete }) => {
         project_id: null
       });
 
-      if (response.success) {
-        setResult(response.data);
-        
-        // Notify parent component
-        if (onComplete) {
-          onComplete(response.data.attempt.id, response.data.attempt.status);
-        }
+      console.log('✅ Raw API response:', response);
+      console.log('✅ Response type:', typeof response);
+      console.log('✅ Response.success:', response?.success);
+      console.log('✅ Response.data:', response?.data);
+      console.log('✅ Response.data type:', typeof response?.data);
+      
+      // ✅ Validate response structure
+      if (!response) {
+        throw new Error('No response from server');
+      }
 
-        // Auto-close on success after 2 seconds
-        if (response.data.attempt.status === 'passed') {
-          setTimeout(() => {
-            onClose();
-          }, 2000);
+      // Backend returns: { success: true, data: { attempt: {...}, evaluation: {...} } }
+      if (response.success === false) {
+        throw new Error(response.message || 'Server returned unsuccessful response');
+      }
+
+      // Check if we have the data object
+      if (!response.data) {
+        console.error('❌ Response structure:', JSON.stringify(response, null, 2));
+        throw new Error('No data in response');
+      }
+
+      // Check if we have attempt data
+      if (!response.data.attempt) {
+        console.error('❌ Data structure:', JSON.stringify(response.data, null, 2));
+        throw new Error('No attempt data in response. Got: ' + Object.keys(response.data).join(', '));
+      }
+
+      console.log('✅ Challenge submission successful:', {
+        attemptId: response.data.attempt.id,
+        status: response.data.attempt.status,
+        score: response.data.attempt.score
+      });
+
+      // ✅ Set result for display
+      setResult(response.data);
+
+      // ✅ Notify parent component
+      if (onComplete) {
+        const attemptId = response.data.attempt.id;
+        const status = response.data.attempt.status;
+
+        console.log('🎯 Calling onComplete with:', { attemptId, status });
+
+        if (attemptId && status) {
+          onComplete(attemptId, status);
+        } else {
+          console.error('⚠️ Missing attempt ID or status');
         }
       }
+
+      // ✅ Auto-close on success after 2 seconds
+      if (response.data.attempt.status === 'passed') {
+        setTimeout(() => {
+          onClose();
+        }, 2000);
+      }
+
     } catch (err) {
-      console.error('Error submitting challenge:', err);
-      setError(err.response?.data?.message || 'Failed to submit solution. Please try again.');
+      console.error('❌ Challenge submission error:', err);
+      console.error('Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        stack: err.stack
+      });
+
+      // ✅ Set user-friendly error message
+      let errorMessage = 'Failed to submit solution. Please try again.';
+
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -123,21 +189,31 @@ const ChallengeAttemptModal = ({ isOpen, onClose, challenge, onComplete }) => {
           )}
 
           {/* Result */}
-          {result && (
+          {result && result.attempt && (
             <div style={result.attempt.status === 'passed' ? styles.successResult : styles.failedResult}>
               {result.attempt.status === 'passed' ? (
                 <>
                   <CheckCircle size={20} />
                   <div>
-                    <strong>Success!</strong> You've verified your proficiency.
+                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>Challenge Passed!</div>
+                    <div style={styles.feedback}>Score: {result.attempt.score}/100</div>
+                    {result.evaluation?.feedback && (
+                      <div style={styles.feedback}>{result.evaluation.feedback}</div>
+                    )}
                   </div>
                 </>
               ) : (
                 <>
                   <XCircle size={20} />
                   <div>
-                    <strong>Try Again!</strong> Your solution didn't pass all test cases.
-                    {result.feedback && <div style={styles.feedback}>{result.feedback}</div>}
+                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>Challenge Failed</div>
+                    <div style={styles.feedback}>Score: {result.attempt.score}/100</div>
+                    {result.evaluation?.feedback && (
+                      <div style={styles.feedback}>{result.evaluation.feedback}</div>
+                    )}
+                    <div style={{ ...styles.feedback, marginTop: '8px' }}>
+                      Try again with a more complete solution!
+                    </div>
                   </div>
                 </>
               )}
@@ -151,30 +227,27 @@ const ChallengeAttemptModal = ({ isOpen, onClose, challenge, onComplete }) => {
               onClick={onClose}
               disabled={loading}
             >
-              Cancel
+              {result?.attempt?.status === 'passed' ? 'Close' : 'Cancel'}
             </button>
-            <button
-              style={styles.submitButton}
-              onClick={handleSubmit}
-              disabled={loading || !code.trim() || result?.attempt?.status === 'passed'}
-            >
-              {loading ? (
-                <>
-                  <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                  Submitting...
-                </>
-              ) : result?.attempt?.status === 'passed' ? (
-                <>
-                  <CheckCircle size={16} />
-                  Verified
-                </>
-              ) : (
-                <>
-                  <Send size={16} />
-                  Submit Solution
-                </>
-              )}
-            </button>
+            {!result || result.attempt?.status !== 'passed' ? (
+              <button
+                style={styles.submitButton}
+                onClick={handleSubmit}
+                disabled={loading || !code.trim()}
+              >
+                {loading ? (
+                  <>
+                    <Loader size={16} className="spinner" />
+                    Evaluating...
+                  </>
+                ) : (
+                  <>
+                    <Send size={16} />
+                    Submit Solution
+                  </>
+                )}
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -189,50 +262,49 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backdropFilter: 'blur(4px)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1100,
-    backdropFilter: 'blur(4px)'
+    zIndex: 2000,
+    padding: '20px'
   },
   modal: {
-    backgroundColor: '#1a1d29',
-    borderRadius: '16px',
-    width: '90%',
+    backgroundColor: '#0d1117',
+    borderRadius: '12px',
+    width: '100%',
     maxWidth: '700px',
     maxHeight: '90vh',
-    overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    border: '1px solid rgba(59, 130, 246, 0.3)',
-    boxShadow: '0 25px 50px rgba(0, 0, 0, 0.5)'
+    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+    border: '1px solid rgba(255, 255, 255, 0.1)'
   },
   header: {
-    padding: '20px 24px',
+    padding: '24px',
     borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.1))'
+    alignItems: 'flex-start',
+    justifyContent: 'space-between'
   },
   headerContent: {
     display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
+    alignItems: 'flex-start',
+    gap: '16px',
     flex: 1
   },
   title: {
-    margin: 0,
     fontSize: '18px',
     fontWeight: '600',
-    color: '#ffffff'
+    color: '#ffffff',
+    margin: 0,
+    marginBottom: '4px'
   },
   subtitle: {
-    margin: '4px 0 0 0',
     fontSize: '13px',
     color: '#9ca3af',
-    textTransform: 'capitalize'
+    margin: 0
   },
   closeButton: {
     background: 'transparent',
