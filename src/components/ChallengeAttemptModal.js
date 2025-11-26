@@ -20,9 +20,12 @@ const ChallengeAttemptModal = ({ isOpen, onClose, challenge, onComplete }) => {
       setError('');
       setResult(null);
 
-      const response = await ChallengeAPI.attemptChallenge(challenge.id, {
-        solution_code: code,
-        programming_language_id: challenge.programming_language_id
+      // ✅ CORRECT
+      const response = await ChallengeAPI.submitSimpleChallenge({
+        challenge_id: challenge.id,
+        submitted_code: code,
+        language: challenge.programming_languages?.name || 'JavaScript',
+        project_id: null
       });
 
       if (response.success) {
