@@ -105,7 +105,7 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
   // Check if user can attempt challenge (with alert detection)
   const checkCanAttempt = useCallback(async () => {
     try {
-      const url = `${API_BASE_URL}/api/challenges/project/${projectId}/can-attempt?t=${Date.now()}`;
+      const url = `${API_BASE_URL}/challenges/project/${projectId}/can-attempt?t=${Date.now()}`;
       const response = await fetch(url, { method: 'GET', headers: getAuthHeaders() });
       const data = await handleApiResponse(response, 'Can-attempt check');
 
@@ -129,7 +129,7 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
 
     try {
       setError(null);
-      const url = `${API_BASE_URL}/api/challenges/project/${projectId}/challenge?t=${Date.now()}`;
+      const url = `${API_BASE_URL}/challenges/project/${projectId}/challenge?t=${Date.now()}`;
       const response = await fetch(url, { method: 'GET', headers: getAuthHeaders() });
       const data = await handleApiResponse(response, 'Fetch challenge');
 
@@ -174,7 +174,7 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
         payload.challengeId = challenge.challenge.id;
       }
 
-      const url = `${API_BASE_URL}/api/challenges/project/${projectId}/attempt`;
+      const url = `${API_BASE_URL}/challenges/project/${projectId}/attempt`;
       const response = await fetch(url, {
         method: 'POST',
         headers: getAuthHeaders(),
@@ -228,7 +228,7 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
     }
 
     // FIXED: Added /api/ prefix to URL
-    const url = `${API_BASE_URL}/api/challenges/project/${projectId}/attempt`;
+    const url = `${API_BASE_URL}/challenges/project/${projectId}/attempt`;
     const response = await fetch(url, {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -1020,7 +1020,7 @@ const handleCut = (e) => {
       <div style={styles.container}>
         <div style={styles.modal}>
           <div style={styles.centerContent}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}></div>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
             <h3 style={{ color: '#ef4444', marginBottom: '16px' }}>Error Loading Challenge</h3>
             <p style={{ color: '#e2e8f0', marginBottom: '20px' }}>{error}</p>
             <div style={{ marginBottom: '20px', fontSize: '12px', color: '#6b7280' }}>
