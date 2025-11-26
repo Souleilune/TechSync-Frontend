@@ -30,6 +30,8 @@ const VideoCall = ({
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [participants, setParticipants] = useState([]);
   const [callStatus, setCallStatus] = useState('connecting'); // connecting, connected, ended
+  const [screenSharingUser, setScreenSharingUser] = useState(null); // null, 'local', or userId
+
 
   // Refs
   const localVideoRef = useRef(null);
@@ -46,6 +48,21 @@ const VideoCall = ({
       { urls: 'stun:stun2.l.google.com:19302' }
     ]
   };
+
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    const saved = localStorage.getItem('projectSidebarCollapsed');
+    return saved === 'true';
+  });
+
+   useEffect(() => {
+    const handleSidebarToggle = (event) => {
+      setIsSidebarCollapsed(event.detail.collapsed);
+    };
+
+    window.addEventListener('projectSidebarToggle', handleSidebarToggle);
+    return () => window.removeEventListener('projectSidebarToggle', handleSidebarToggle);
+  }, []);
+
 
   // Initialize local media stream
   const initializeMedia = useCallback(async () => {
@@ -275,68 +292,86 @@ const VideoCall = ({
   }, [localStream, isVideoOff]);
 
   // Toggle screen sharing
-  const toggleScreenShare = useCallback(async () => {
-    try {
-      if (!isScreenSharing) {
-        // Start screen sharing
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: {
-            cursor: 'always'
-          },
-          audio: false
-        });
+const toggleScreenShare = useCallback(async () => {
+  try {
+    if (!isScreenSharing) {
+      // Start screen sharing
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { 
+          cursor: 'always',
+          displaySurface: 'monitor' // Prefer full screen
+        },
+        audio: false
+      });
 
-        screenStream.current = stream;
-        
-        // Replace video track in all peer connections
-        const videoTrack = stream.getVideoTracks()[0];
+      screenStream.current = stream;
+
+      // Replace video track in all peer connections
+      const videoTrack = stream.getVideoTracks()[0];
+      peerConnections.current.forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) {
+          sender.replaceTrack(videoTrack);
+        }
+      });
+
+      // Handle stream end
+      videoTrack.onended = () => {
+        toggleScreenShare();
+      };
+
+      setIsScreenSharing(true);
+      setScreenSharingUser('local'); // Mark local user as sharing
+
+      // Notify other participants
+      socket.emit('screen_share_started', {
+        roomId,
+        projectId,
+        userId: currentUser.id
+      });
+
+    } else {
+      // Stop screen sharing
+      if (screenStream.current) {
+        screenStream.current.getTracks().forEach(track => track.stop());
+      }
+
+      // Switch back to camera
+      if (localStream) {
+        const videoTrack = localStream.getVideoTracks()[0];
         peerConnections.current.forEach(pc => {
           const sender = pc.getSenders().find(s => s.track?.kind === 'video');
           if (sender) {
             sender.replaceTrack(videoTrack);
           }
         });
-
-        // Update local video
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-
-        // Handle screen share stop
-        videoTrack.onended = () => {
-          toggleScreenShare();
-        };
-
-        setIsScreenSharing(true);
-      } else {
-        // Stop screen sharing
-        if (screenStream.current) {
-          screenStream.current.getTracks().forEach(track => track.stop());
-          screenStream.current = null;
-        }
-
-        // Restore camera video
-        if (localStream) {
-          const videoTrack = localStream.getVideoTracks()[0];
-          peerConnections.current.forEach(pc => {
-            const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-            if (sender) {
-              sender.replaceTrack(videoTrack);
-            }
-          });
-
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = localStream;
-          }
-        }
-
-        setIsScreenSharing(false);
       }
-    } catch (error) {
-      console.error('❌ [VIDEO] Screen share error:', error);
-    }
-  }, [isScreenSharing, localStream]);
 
+      setIsScreenSharing(false);
+      setScreenSharingUser(null);
+
+      // Notify other participants
+      socket.emit('screen_share_stopped', {
+        roomId,
+        projectId,
+        userId: currentUser.id
+      });
+    }
+  } catch (error) {
+    console.error('❌ [VIDEO] Screen share error:', error);
+  }
+}, [isScreenSharing, localStream, socket, roomId, projectId, currentUser.id]);
+
+
+socket.on('screen_share_started', (data) => {
+  setScreenSharingUser(data.userId);
+});
+
+socket.on('screen_share_stopped', (data) => {
+  if (screenSharingUser === data.userId) {
+    setScreenSharingUser(null);
+  }
+});
   // Toggle fullscreen
   const toggleFullScreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -441,13 +476,14 @@ const VideoCall = ({
       style={{
         position: 'fixed',
         top: 0,
-        left: 0,
+        left: isSidebarCollapsed ? '60px' : '250px',
         right: 0,
         bottom: 0,
         backgroundColor: '#0F1116',
         zIndex: 9999,
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        transition: 'left 0.3s ease'
       }}
     >
       {/* Header */}
@@ -486,58 +522,144 @@ const VideoCall = ({
 
       {/* Video Grid */}
       <div style={{
+  flex: 1,
+  padding: '16px',
+  overflowY: 'auto',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '16px'
+}}>
+  {/* Screen Share Display - Large Container */}
+  {screenSharingUser && (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '12px',
+      flex: 1,
+      minHeight: '400px'
+    }}>
+      {/* Main Screen Share */}
+      <div style={{
+        position: 'relative',
+        backgroundColor: 'rgba(26, 28, 32, 0.95)',
+        borderRadius: '12px',
+        overflow: 'hidden',
         flex: 1,
-        display: 'grid',
-        gridTemplateColumns: remoteStreams.size === 0 ? '1fr' : 
-                            remoteStreams.size === 1 ? 'repeat(2, 1fr)' :
-                            remoteStreams.size === 2 ? 'repeat(2, 1fr)' :
-                            'repeat(3, 1fr)',
-        gap: '16px',
-        padding: '16px',
-        overflowY: 'auto'
+        border: '2px solid rgba(16, 185, 129, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
       }}>
-        {/* Local Video */}
+        {screenSharingUser === 'local' ? (
+          // Local screen share
+          <video
+            ref={el => {
+              if (el && screenStream.current) {
+                el.srcObject = screenStream.current;
+              }
+            }}
+            autoPlay
+            playsInline
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain', // ✅ Changed from 'cover' to 'contain' for screen
+              backgroundColor: '#000'
+            }}
+          />
+        ) : (
+          // Remote screen share
+          <video
+            ref={el => {
+              const remoteData = remoteStreams.get(screenSharingUser);
+              if (el && remoteData?.stream) {
+                el.srcObject = remoteData.stream;
+              }
+            }}
+            autoPlay
+            playsInline
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain', // ✅ Changed from 'cover' to 'contain' for screen
+              backgroundColor: '#000'
+            }}
+          />
+        )}
+        <div style={{
+          position: 'absolute',
+          top: '12px',
+          left: '12px',
+          padding: '8px 16px',
+          backgroundColor: 'rgba(16, 185, 129, 0.9)',
+          borderRadius: '6px',
+          fontSize: '14px',
+          color: 'white',
+          fontWeight: '600',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <Monitor size={16} />
+          {screenSharingUser === 'local' ? 'You are sharing your screen' : 
+           `${remoteStreams.get(screenSharingUser)?.username} is sharing`}
+        </div>
+      </div>
+
+      {/* Camera Views - Small Row Below Screen Share */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '12px',
+        maxHeight: '150px'
+      }}>
+        {/* Local Camera (small) */}
         <div style={{
           position: 'relative',
           backgroundColor: 'rgba(26, 28, 32, 0.95)',
           borderRadius: '12px',
           overflow: 'hidden',
           aspectRatio: '16/9',
-          border: '2px solid rgba(59, 130, 246, 0.3)'
+          border: screenSharingUser === 'local' ? 
+                 '2px solid rgba(59, 130, 246, 0.3)' : 
+                 '1px solid rgba(255, 255, 255, 0.1)'
         }}>
           <video
-            ref={localVideoRef}
+            ref={screenSharingUser === 'local' ? null : localVideoRef}
             autoPlay
             muted
             playsInline
+            srcObject={screenSharingUser === 'local' ? localStream : null}
             style={{
               width: '100%',
               height: '100%',
               objectFit: 'cover',
-              transform: 'scaleX(-1)'
+              transform: 'scaleX(-1)' // Mirror for camera
             }}
           />
           <div style={{
             position: 'absolute',
-            bottom: '12px',
-            left: '12px',
-            padding: '6px 12px',
+            bottom: '8px',
+            left: '8px',
+            padding: '4px 8px',
             backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            borderRadius: '6px',
-            fontSize: '14px',
+            borderRadius: '4px',
+            fontSize: '12px',
             color: 'white',
             display: 'flex',
             alignItems: 'center',
-            gap: '8px'
+            gap: '6px'
           }}>
-            <span>{currentUser.username} (You)</span>
-            {isMuted && <MicOff size={14} color="#ef4444" />}
-            {isVideoOff && <VideoOff size={14} color="#ef4444" />}
+            <span>{currentUser.username}</span>
+            {isMuted && <MicOff size={12} color="#ef4444" />}
+            {isVideoOff && <VideoOff size={12} color="#ef4444" />}
           </div>
         </div>
 
-        {/* Remote Videos */}
-        {Array.from(remoteStreams.entries()).map(([userId, data]) => (
+        {/* Remote Cameras (small) */}
+        {Array.from(remoteStreams.entries())
+          .filter(([userId]) => userId !== screenSharingUser)
+          .map(([userId, data]) => (
           <div
             key={userId}
             style={{
@@ -561,12 +683,12 @@ const VideoCall = ({
             />
             <div style={{
               position: 'absolute',
-              bottom: '12px',
-              left: '12px',
-              padding: '6px 12px',
+              bottom: '8px',
+              left: '8px',
+              padding: '4px 8px',
               backgroundColor: 'rgba(0, 0, 0, 0.7)',
-              borderRadius: '6px',
-              fontSize: '14px',
+              borderRadius: '4px',
+              fontSize: '12px',
               color: 'white'
             }}>
               {data.username}
@@ -574,105 +696,243 @@ const VideoCall = ({
           </div>
         ))}
       </div>
+    </div>
+  )}
 
-      {/* Controls */}
+  {/* Normal Video Grid - When No Screen Sharing */}
+  {!screenSharingUser && (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: remoteStreams.size === 0 ? '1fr' : 
+                          remoteStreams.size === 1 ? 'repeat(2, 1fr)' :
+                          remoteStreams.size === 2 ? 'repeat(2, 1fr)' :
+                          'repeat(3, 1fr)',
+      gap: '12px',
+      alignContent: 'start'
+    }}>
+      {/* Local Video */}
       <div style={{
-        padding: '24px',
+        position: 'relative',
         backgroundColor: 'rgba(26, 28, 32, 0.95)',
-        borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '16px'
+        borderRadius: '12px',
+        overflow: 'hidden',
+        aspectRatio: '16/9',
+        maxHeight: '280px',
+        border: '2px solid rgba(59, 130, 246, 0.3)'
       }}>
-        <button
-          onClick={toggleMute}
+        <video
+          ref={localVideoRef}
+          autoPlay
+          muted
+          playsInline
           style={{
-            padding: '16px',
-            borderRadius: '12px',
-            border: 'none',
-            cursor: 'pointer',
-            backgroundColor: isMuted ? 'rgba(239, 68, 68, 0.2)' : 'rgba(59, 130, 246, 0.2)',
-            color: isMuted ? '#ef4444' : '#3b82f6',
-            transition: 'all 0.2s ease'
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            transform: 'scaleX(-1)' // Mirror for camera
           }}
-          title={isMuted ? 'Unmute' : 'Mute'}
-        >
-          {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
-        </button>
-
-        <button
-          onClick={toggleVideo}
-          style={{
-            padding: '16px',
-            borderRadius: '12px',
-            border: 'none',
-            cursor: 'pointer',
-            backgroundColor: isVideoOff ? 'rgba(239, 68, 68, 0.2)' : 'rgba(59, 130, 246, 0.2)',
-            color: isVideoOff ? '#ef4444' : '#3b82f6',
-            transition: 'all 0.2s ease'
-          }}
-          title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
-        >
-          {isVideoOff ? <VideoOff size={24} /> : <Video size={24} />}
-        </button>
-
-        <button
-          onClick={toggleScreenShare}
-          style={{
-            padding: '16px',
-            borderRadius: '12px',
-            border: 'none',
-            cursor: 'pointer',
-            backgroundColor: isScreenSharing ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.2)',
-            color: isScreenSharing ? '#10b981' : '#3b82f6',
-            transition: 'all 0.2s ease'
-          }}
-          title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
-        >
-          {isScreenSharing ? <MonitorOff size={24} /> : <Monitor size={24} />}
-        </button>
-
-        <button
-          onClick={toggleFullScreen}
-          style={{
-            padding: '16px',
-            borderRadius: '12px',
-            border: 'none',
-            cursor: 'pointer',
-            backgroundColor: 'rgba(59, 130, 246, 0.2)',
-            color: '#3b82f6',
-            transition: 'all 0.2s ease'
-          }}
-          title={isFullScreen ? 'Exit fullscreen' : 'Fullscreen'}
-        >
-          {isFullScreen ? <Minimize2 size={24} /> : <Maximize2 size={24} />}
-        </button>
-
-        <div style={{ width: '1px', height: '40px', backgroundColor: 'rgba(255, 255, 255, 0.1)' }} />
-
-        <button
-          onClick={handleEndCall}
-          style={{
-            padding: '16px 24px',
-            borderRadius: '12px',
-            border: 'none',
-            cursor: 'pointer',
-            backgroundColor: 'rgba(239, 68, 68, 0.2)',
-            color: '#ef4444',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontWeight: '600',
-            fontSize: '14px',
-            transition: 'all 0.2s ease'
-          }}
-          title="End call"
-        >
-          <PhoneOff size={20} />
-          End Call
-        </button>
+        />
+        <div style={{
+          position: 'absolute',
+          bottom: '12px',
+          left: '12px',
+          padding: '6px 12px',
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          borderRadius: '6px',
+          fontSize: '14px',
+          color: 'white',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <span>{currentUser.username} (You)</span>
+          {isMuted && <MicOff size={14} color="#ef4444" />}
+          {isVideoOff && <VideoOff size={14} color="#ef4444" />}
+        </div>
       </div>
+
+      {/* Remote Videos */}
+      {Array.from(remoteStreams.entries()).map(([userId, data]) => (
+        <div
+          key={userId}
+          style={{
+            position: 'relative',
+            backgroundColor: 'rgba(26, 28, 32, 0.95)',
+            borderRadius: '12px',
+            overflow: 'hidden',
+            aspectRatio: '16/9',
+            maxHeight: '280px',
+            border: '1px solid rgba(255, 255, 255, 0.1)'
+          }}
+        >
+          <video
+            ref={el => remoteVideosRef.current[userId] = el}
+            autoPlay
+            playsInline
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover'
+            }}
+          />
+          <div style={{
+            position: 'absolute',
+            bottom: '12px',
+            left: '12px',
+            padding: '6px 12px',
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            borderRadius: '6px',
+            fontSize: '14px',
+            color: 'white'
+          }}>
+            {data.username}
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+      {/* Controls */}
+     <div style={{
+  padding: '20px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '20px'
+}}>
+  <button
+    onClick={toggleMute}
+    style={{
+      padding: '0',
+      border: 'none',
+      cursor: 'pointer',
+      backgroundColor: 'transparent',
+      color: isMuted ? '#ef4444' : '#3b82f6',
+      transition: 'all 0.2s ease',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.opacity = '0.7';
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.opacity = '1';
+    }}
+    title={isMuted ? 'Unmute' : 'Mute'}
+  >
+    {isMuted ? <MicOff size={28} /> : <Mic size={28} />}
+  </button>
+
+  <button
+    onClick={toggleVideo}
+    style={{
+      padding: '0',
+      border: 'none',
+      cursor: 'pointer',
+      backgroundColor: 'transparent',
+      color: isVideoOff ? '#ef4444' : '#3b82f6',
+      transition: 'all 0.2s ease',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.opacity = '0.7';
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.opacity = '1';
+    }}
+    title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
+  >
+    {isVideoOff ? <VideoOff size={28} /> : <Video size={28} />}
+  </button>
+
+  <button
+    onClick={toggleScreenShare}
+    style={{
+      padding: '0',
+      border: 'none',
+      cursor: 'pointer',
+      backgroundColor: 'transparent',
+      color: isScreenSharing ? '#10b981' : '#3b82f6',
+      transition: 'all 0.2s ease',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.opacity = '0.7';
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.opacity = '1';
+    }}
+    title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+  >
+    {isScreenSharing ? <MonitorOff size={28} /> : <Monitor size={28} />}
+  </button>
+
+  <button
+    onClick={toggleFullScreen}
+    style={{
+      padding: '0',
+      border: 'none',
+      cursor: 'pointer',
+      backgroundColor: 'transparent',
+      color: '#3b82f6',
+      transition: 'all 0.2s ease',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.opacity = '0.7';
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.opacity = '1';
+    }}
+    title={isFullScreen ? 'Exit fullscreen' : 'Fullscreen'}
+  >
+    {isFullScreen ? <Minimize2 size={28} /> : <Maximize2 size={28} />}
+  </button>
+
+  <div style={{ 
+    width: '2px', 
+    height: '30px', 
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    margin: '0 8px'
+  }} />
+
+  <button
+    onClick={handleEndCall}
+    style={{
+      padding: '12px 24px',
+      borderRadius: '8px',
+      border: 'none',
+      cursor: 'pointer',
+      backgroundColor: '#ef4444',
+      color: 'white',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      fontWeight: '600',
+      fontSize: '14px',
+      transition: 'all 0.2s ease'
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.backgroundColor = '#dc2626';
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.backgroundColor = '#ef4444';
+    }}
+    title="End call"
+  >
+    <PhoneOff size={18} />
+    End Call
+  </button>
+</div>
+
+
     </div>
   );
 };
