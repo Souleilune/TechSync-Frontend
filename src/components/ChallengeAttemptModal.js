@@ -20,7 +20,9 @@ const ChallengeAttemptModal = ({ isOpen, onClose, challenge, onComplete }) => {
       setError('');
       setResult(null);
 
-      // ✅ CORRECT
+      console.log('📝 Submitting challenge...');
+
+      // ✅ CORRECT - Uses language-based evaluator
       const response = await ChallengeAPI.submitSimpleChallenge({
         challenge_id: challenge.id,
         submitted_code: code,
@@ -28,23 +30,44 @@ const ChallengeAttemptModal = ({ isOpen, onClose, challenge, onComplete }) => {
         project_id: null
       });
 
-      if (response.success) {
-        setResult(response.data);
-        
-        // Notify parent component
-        if (onComplete) {
-          onComplete(response.data.attempt.id, response.data.attempt.status);
-        }
+      console.log('📦 Full response:', response);
+      console.log('📦 response.success:', response?.success);
+      console.log('📦 response.data:', response?.data);
+      console.log('📦 response.data.attempt:', response?.data?.attempt);
 
-        // Auto-close on success after 2 seconds
-        if (response.data.attempt.status === 'passed') {
-          setTimeout(() => {
-            onClose();
-          }, 2000);
+      if (response && response.success) {
+        // Backend returns: { success: true, data: { attempt: {...}, evaluation: {...} } }
+        if (response.data && response.data.attempt) {
+          console.log('✅ Setting result with:', response.data);
+          setResult(response.data);
+          
+          // Notify parent component
+          if (onComplete) {
+            console.log('🎯 Calling onComplete');
+            onComplete(response.data.attempt.id, response.data.attempt.status);
+          }
+
+          // Auto-close on success after 2 seconds
+          if (response.data.attempt.status === 'passed') {
+            console.log('🎉 Challenge passed! Auto-closing in 2s');
+            setTimeout(() => {
+              onClose();
+            }, 2000);
+          }
+        } else {
+          console.error('❌ Response structure invalid:', {
+            hasData: !!response.data,
+            hasAttempt: !!response.data?.attempt,
+            dataKeys: response.data ? Object.keys(response.data) : 'no data'
+          });
+          setError('Invalid response structure from server');
         }
+      } else {
+        console.error('❌ Response not successful:', response);
+        setError(response?.message || 'Failed to submit solution');
       }
     } catch (err) {
-      console.error('Error submitting challenge:', err);
+      console.error('❌ Error submitting challenge:', err);
       setError(err.response?.data?.message || 'Failed to submit solution. Please try again.');
     } finally {
       setLoading(false);
@@ -123,21 +146,28 @@ const ChallengeAttemptModal = ({ isOpen, onClose, challenge, onComplete }) => {
           )}
 
           {/* Result */}
-          {result && (
+          {result && result.attempt && (
             <div style={result.attempt.status === 'passed' ? styles.successResult : styles.failedResult}>
               {result.attempt.status === 'passed' ? (
                 <>
                   <CheckCircle size={20} />
                   <div>
-                    <strong>Success!</strong> You've verified your proficiency.
+                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>Challenge Passed!</div>
+                    <div style={styles.feedback}>Score: {result.attempt.score}/100</div>
+                    {result.evaluation?.feedback && (
+                      <div style={styles.feedback}>{result.evaluation.feedback}</div>
+                    )}
                   </div>
                 </>
               ) : (
                 <>
                   <XCircle size={20} />
                   <div>
-                    <strong>Try Again!</strong> Your solution didn't pass all test cases.
-                    {result.feedback && <div style={styles.feedback}>{result.feedback}</div>}
+                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>Challenge Failed</div>
+                    <div style={styles.feedback}>Score: {result.attempt.score}/100</div>
+                    {result.evaluation?.feedback && (
+                      <div style={styles.feedback}>{result.evaluation.feedback}</div>
+                    )}
                   </div>
                 </>
               )}
@@ -161,7 +191,7 @@ const ChallengeAttemptModal = ({ isOpen, onClose, challenge, onComplete }) => {
               {loading ? (
                 <>
                   <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                  Submitting...
+                  Evaluating...
                 </>
               ) : result?.attempt?.status === 'passed' ? (
                 <>
