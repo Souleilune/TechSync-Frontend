@@ -1044,7 +1044,7 @@ const handleCut = (e) => {
                 e.target.style.boxShadow = '0 4px 16px rgba(16, 185, 129, 0.3)';
               }}
             >
-              🔄 Try Again
+              Try Again
             </button>
           </div>
         </div>
@@ -1618,7 +1618,7 @@ const handleCut = (e) => {
                     backdropFilter: 'blur(10px)'
                   }}>
                     <p style={{ fontSize: '16px', fontWeight: 'bold', margin: '0 0 12px 0', color: 'white' }}>
-                      📊 Evaluation Breakdown:
+                      Evaluation Breakdown:
                     </p>
                     <ul style={{ margin: 0, paddingLeft: '20px' }}>
                       <li style={{ fontSize: '14px', margin: '6px 0', color: '#e2e8f0' }}>
