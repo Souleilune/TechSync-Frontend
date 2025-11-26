@@ -1,4 +1,5 @@
 // frontend/src/components/ChallengeAttemptModal.js
+// FINAL FIX - Correct field names for backend
 import React, { useState } from 'react';
 import { X, Code, Send, CheckCircle, XCircle, Loader, AlertCircle } from 'lucide-react';
 import ChallengeAPI from '../services/challengeAPI';
@@ -20,55 +21,54 @@ const ChallengeAttemptModal = ({ isOpen, onClose, challenge, onComplete }) => {
       setError('');
       setResult(null);
 
-      console.log('📝 Submitting challenge...');
+      console.log('📝 Challenge data:', challenge);
+      console.log('📝 Programming language:', challenge.programming_languages);
 
-      // ✅ CORRECT - Uses language-based evaluator
+      // Get the language name from the challenge object
+      const languageName = challenge.programming_languages?.name || 
+                          challenge.language?.name ||
+                          'JavaScript';
+
+      console.log('📝 Submitting with language:', languageName);
+
+      // ✅ CORRECT - Uses language-based evaluator with proper field names
       const response = await ChallengeAPI.submitSimpleChallenge({
         challenge_id: challenge.id,
         submitted_code: code,
-        language: challenge.programming_languages?.name || 'JavaScript',
+        language: languageName,  // ✅ Backend expects 'language' as string name
         project_id: null
       });
 
       console.log('📦 Full response:', response);
-      console.log('📦 response.success:', response?.success);
-      console.log('📦 response.data:', response?.data);
-      console.log('📦 response.data.attempt:', response?.data?.attempt);
 
       if (response && response.success) {
-        // Backend returns: { success: true, data: { attempt: {...}, evaluation: {...} } }
         if (response.data && response.data.attempt) {
-          console.log('✅ Setting result with:', response.data);
+          console.log('✅ Challenge completed!', response.data.attempt);
           setResult(response.data);
           
           // Notify parent component
           if (onComplete) {
-            console.log('🎯 Calling onComplete');
             onComplete(response.data.attempt.id, response.data.attempt.status);
           }
 
           // Auto-close on success after 2 seconds
           if (response.data.attempt.status === 'passed') {
-            console.log('🎉 Challenge passed! Auto-closing in 2s');
             setTimeout(() => {
               onClose();
             }, 2000);
           }
         } else {
-          console.error('❌ Response structure invalid:', {
-            hasData: !!response.data,
-            hasAttempt: !!response.data?.attempt,
-            dataKeys: response.data ? Object.keys(response.data) : 'no data'
-          });
-          setError('Invalid response structure from server');
+          console.error('❌ Invalid response structure');
+          setError('Invalid response from server');
         }
       } else {
-        console.error('❌ Response not successful:', response);
+        console.error('❌ Response not successful');
         setError(response?.message || 'Failed to submit solution');
       }
     } catch (err) {
       console.error('❌ Error submitting challenge:', err);
-      setError(err.response?.data?.message || 'Failed to submit solution. Please try again.');
+      console.error('❌ Error response:', err.response?.data);
+      setError(err.response?.data?.message || err.message || 'Failed to submit solution. Please try again.');
     } finally {
       setLoading(false);
     }
