@@ -105,7 +105,7 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
   // Check if user can attempt challenge (with alert detection)
   const checkCanAttempt = useCallback(async () => {
     try {
-      const url = `${API_BASE_URL}/challenges/project/${projectId}/can-attempt?t=${Date.now()}`;
+      const url = `${API_BASE_URL}/api/challenges/project/${projectId}/can-attempt?t=${Date.now()}`;
       const response = await fetch(url, { method: 'GET', headers: getAuthHeaders() });
       const data = await handleApiResponse(response, 'Can-attempt check');
 
@@ -129,7 +129,7 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
 
     try {
       setError(null);
-      const url = `${API_BASE_URL}/challenges/project/${projectId}/challenge?t=${Date.now()}`;
+      const url = `${API_BASE_URL}/api/challenges/project/${projectId}/challenge?t=${Date.now()}`;
       const response = await fetch(url, { method: 'GET', headers: getAuthHeaders() });
       const data = await handleApiResponse(response, 'Fetch challenge');
 
@@ -174,7 +174,7 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
         payload.challengeId = challenge.challenge.id;
       }
 
-      const url = `${API_BASE_URL}/challenges/project/${projectId}/attempt`;
+      const url = `${API_BASE_URL}/api/challenges/project/${projectId}/attempt`;
       const response = await fetch(url, {
         method: 'POST',
         headers: getAuthHeaders(),
