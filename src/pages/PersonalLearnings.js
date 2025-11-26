@@ -1,7 +1,7 @@
 // frontend/src/pages/PersonalLearnings.js
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, Youtube, Github, ExternalLink, Trash2, Clock, Star, GraduationCap } from 'lucide-react';
+import { BookOpen, Youtube, Github, ExternalLink, Trash2, Clock, Star, GraduationCap, BookMarked } from 'lucide-react';
 
 const PersonalLearnings = ({ userId }) => {
   const navigate = useNavigate();
@@ -17,6 +17,8 @@ const PersonalLearnings = ({ userId }) => {
     if (userId) {
       fetchLearnings();
       fetchEnrollments();
+      fetchBookmarkedArticles();
+
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
@@ -117,6 +119,32 @@ const PersonalLearnings = ({ userId }) => {
     } catch (err) {
       console.error('Error removing learning:', err);
       alert('Failed to remove resource');
+    }
+  };
+
+  const handleRemoveBookmark = async (articleId) => {
+    if (!window.confirm('Are you sure you want to remove this bookmark?'))
+      return;
+
+    try {
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL}/recommendations/bookmark-article`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ articleId })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setBookmarkedArticles(bookmarkedArticles.filter(article => article.id !== articleId));
+      }
+    } catch (err) {
+      console.error('Error removing bookmark:', err);
+      alert('Failed to remove bookmark');
     }
   };
 
@@ -288,27 +316,177 @@ const PersonalLearnings = ({ userId }) => {
               <div style={styles.statLabel}>Saved Resources</div>
             </div>
           </div>
+          <div style={styles.statBox}>
+            <BookMarked size={24} color="#8b5cf6" />
+            <div>
+              <div style={styles.statNumber}>{bookmarkedArticles.length}</div>
+              <div style={styles.statLabel}>Bookmarked Articles</div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {learnings.length === 0 ? (
+      {learnings.length === 0 && bookmarkedArticles.length === 0 ? (
         <div style={styles.emptyState}>
           <BookOpen size={64} color="#6b7280" />
           <h2 style={styles.emptyTitle}>No saved resources yet</h2>
           <p style={styles.emptyText}>
-            When you encounter challenge failures, you can save recommended resources to revisit later.
+            When you encounter challenge failures or bookmark articles, they'll appear here for easy access.
           </p>
         </div>
       ) : (
-        <div style={styles.grid}>
-          {learnings.map((learning) => {
+        <>
+          {/* Bookmarked Articles Section */}
+          {bookmarkedArticles.length > 0 && (
+            <>
+              <div style={styles.sectionHeader}>
+                <h2 style={styles.sectionTitle}>
+                  <BookMarked size={20} style={{ marginRight: '0.5rem' }} />
+                  Bookmarked Articles
+                </h2>
+              </div>
+              <div style={styles.grid}>
+                {bookmarkedArticles.map((article) => (
+                  <div
+                    key={`article-${article.id}`}
+                    style={{
+                      ...styles.card,
+                      position: 'relative',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      minHeight: '380px',
+                    }}
+                  >
+                    <div style={{ flexGrow: 1 }}>
+                      <div
+                        style={{
+                          ...styles.providerBadge,
+                          backgroundColor: '#0a0a2315',
+                          color: '#0a0a23',
+                        }}
+                      >
+                        <ExternalLink size={16} />
+                        <span style={{ textTransform: 'uppercase' }}>DEV.TO</span>
+                      </div>
+
+                      {article.cover_image && (
+                        <img 
+                          src={article.cover_image} 
+                          alt={article.title}
+                          style={{
+                            width: '100%',
+                            height: '150px',
+                            objectFit: 'cover',
+                            borderRadius: '8px',
+                            marginBottom: '1rem'
+                          }}
+                        />
+                      )}
+
+                      <h3 style={styles.resourceTitle}>
+                        {article.title}
+                      </h3>
+
+                      {article.description && (
+                        <p style={styles.resourceDescription}>
+                          {article.description.length > 150
+                            ? article.description.substring(0, 150) + '...'
+                            : article.description}
+                        </p>
+                      )}
+
+                      <div style={styles.resourceMeta}>
+                        {article.user?.name && (
+                          <span style={styles.metaItem}>By {article.user.name}</span>
+                        )}
+                        {article.reading_time_minutes && (
+                          <span style={styles.metaItem}>
+                            <Clock size={14} />
+                            {article.reading_time_minutes} min
+                          </span>
+                        )}
+                        {article.positive_reactions_count && (
+                          <span style={styles.metaItem}>
+                            <Star size={14} />
+                            {article.positive_reactions_count}
+                          </span>
+                        )}
+                      </div>
+
+                      {article.tag_list && article.tag_list.length > 0 && (
+                        <div style={{ 
+                          display: 'flex', 
+                          flexWrap: 'wrap', 
+                          gap: '0.5rem',
+                          marginTop: '0.5rem'
+                        }}>
+                          {article.tag_list.slice(0, 3).map((tag, idx) => (
+                            <span 
+                              key={idx}
+                              style={{
+                                fontSize: '0.75rem',
+                                padding: '0.25rem 0.5rem',
+                                backgroundColor: '#3b82f615',
+                                color: '#60a5fa',
+                                borderRadius: '4px'
+                              }}
+                            >
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {article.bookmarked_at && (
+                        <p style={styles.savedInfo}>
+                          Bookmarked on {new Date(article.bookmarked_at).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+
+                    <div style={styles.cardActions}>
+                      <a
+                        href={article.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={styles.viewButton}
+                      >
+                        <ExternalLink size={16} />
+                        Read Article
+                      </a>
+                      <button
+                        onClick={() => handleRemoveBookmark(article.id)}
+                        style={styles.removeButton}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Saved Learning Resources Section */}
+          {learnings.length > 0 && (
+            <>
+              {bookmarkedArticles.length > 0 && (
+                <div style={styles.sectionHeader}>
+                  <h2 style={styles.sectionTitle}>
+                    <BookOpen size={20} style={{ marginRight: '0.5rem' }} />
+                    Saved Learning Resources
+                  </h2>
+                </div>
+              )}
+              <div style={styles.grid}>
+                {learnings.map((learning) => {
             const resource = learning.resource || {};
             const provider = resource.provider || 'unknown';
             const isCourse = isInternalCourse(resource);
             const enrolled = isEnrolled(resource);
             const enrollmentData = getEnrollmentData(resource);
             const progress = enrollmentData?.progress || 0;
-            
             return (
             <div
               key={learning.id}
@@ -485,11 +663,14 @@ const PersonalLearnings = ({ userId }) => {
             </div>
           );
           })}
-        </div>
+              </div>
+            </>
+          )}
+        </>
       )}
     </div>
   );
-};
+}
 
 const styles = {
   container: {
@@ -537,6 +718,17 @@ const styles = {
   statLabel: {
     fontSize: '0.875rem',
     color: '#9ca3af'
+  },
+  sectionHeader: {
+    marginTop: '2rem',
+    marginBottom: '1.5rem'
+  },
+  sectionTitle: {
+    display: 'flex',
+    alignItems: 'center',
+    fontSize: '1.5rem',
+    fontWeight: '600',
+    color: 'white'
   },
   loadingContainer: {
     display: 'flex',
