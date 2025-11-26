@@ -5,7 +5,7 @@ import ChallengeFailureAlert from './ChallengeFailureAlert';
 import TestResultsPanel from './TestResultsPanel';
 import ChallengeHints from './ChallengeHints';
 import { projectService } from '../services/projectService';
-import { Lightbulb, Code2, FileText, TestTube2, ChevronUp, ChevronDown, Lock } from 'lucide-react';
+import { Code2, Clock, CheckCircle, XCircle, Lightbulb, ChevronDown, ChevronUp, FileText, TestTube2, AlertTriangle, Lock } from 'lucide-react';
 
 const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
   const navigate = useNavigate();
@@ -24,6 +24,13 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
   // Alert system state (for failure comfort messages)
   const [alertData, setAlertData] = useState(null);
   const [showAlert, setShowAlert] = useState(false);
+   const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [showTabWarning, setShowTabWarning] = useState(false);
+  const [tabWarningMessage, setTabWarningMessage] = useState('');
+  const [isFocused, setIsFocused] = useState(true);
+  const MAX_TAB_SWITCHES = 3; // Auto-fail after 3 tab switches
+  const [showPasteModal, setShowPasteModal] = useState(false);
+
 
   // Use ref to avoid stale closure issues
   const handleSubmitRef = useRef();
@@ -205,6 +212,48 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
   // Keep ref updated
   handleSubmitRef.current = handleSubmit;
 
+  const handleTabViolationFail = useCallback(async () => {
+  setIsSubmitting(true);
+  setError(null);
+
+  try {
+    const payload = {
+      submittedCode: submittedCode.trim() || '// Auto-failed due to tab switching violations',
+      startedAt,
+      tabViolation: true
+    };
+    
+    if (challenge?.challenge?.id && !challenge.challenge.isTemporary) {
+      payload.challengeId = challenge.challenge.id;
+    }
+
+    // FIXED: Added /api/ prefix to URL
+    const url = `${API_BASE_URL}/api/challenges/project/${projectId}/attempt`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+
+    const data = await handleApiResponse(response, 'Submit attempt');
+    
+    const failResult = {
+      ...data.data,
+      passed: false,
+      score: 0,
+      feedback: '❌ Challenge automatically failed due to excessive tab switching. This is considered a violation of challenge integrity rules.',
+      tabViolation: true
+    };
+    
+    setResult(failResult);
+
+  } catch (err) {
+    setError(`Error submitting challenge: ${err.message}`);
+  } finally {
+    setIsSubmitting(false);
+  }
+}, [submittedCode, startedAt, challenge, projectId, API_BASE_URL, getAuthHeaders, handleApiResponse]);
+
   // Timer countdown effect
   useEffect(() => {
     if (!startedAt || !challenge?.challenge?.time_limit_minutes || result) return;
@@ -240,6 +289,60 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
     }
   }, [canAttempt, challenge, fetchChallenge]);
 
+  useEffect(() => {
+  if (!startedAt || result) return;
+
+  let lastHiddenTime = 0;
+  const DEBOUNCE_MS = 100; // Prevent duplicate counting
+
+  const handleVisibilityChange = () => {
+    const now = Date.now();
+    
+    if (document.hidden) {
+      // User switched away from tab
+      setIsFocused(false);
+      lastHiddenTime = now;
+    } else {
+      // User came back to tab
+      setIsFocused(true);
+      
+      // Only count if enough time has passed (prevent duplicate events)
+      if (now - lastHiddenTime < DEBOUNCE_MS) {
+        return;
+      }
+      
+      // Increment violation count
+      setTabSwitchCount(prev => {
+        const newCount = prev + 1;
+        
+        if (newCount >= MAX_TAB_SWITCHES) {
+          // Auto-fail on max violations
+          handleTabViolationFail();
+        } else {
+          // Show warning
+          const remainingAttempts = MAX_TAB_SWITCHES - newCount;
+          setTabWarningMessage(
+            `WARNING: Tab switching detected! (${newCount}/${MAX_TAB_SWITCHES})\n` +
+            `You have ${remainingAttempts} warning(s) left. ` +
+            `Switching tabs again will result in automatic failure.`
+          );
+          setShowTabWarning(true);
+          
+          setTimeout(() => setShowTabWarning(false), 5000);
+        }
+        
+        return newCount;
+      });
+    }
+  };
+
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+
+  return () => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+  };
+}, [startedAt, result, handleTabViolationFail]);
+
   // Code change (only when started)
   const handleCodeChange = (e) => {
     if (!startedAt) return;
@@ -247,6 +350,85 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
     setSubmittedCode(newCode);
     validateCodeRealTime(newCode);
   };
+
+  useEffect(() => {
+  if (!startedAt || result) return;
+
+  let lastHiddenTime = 0;
+  const DEBOUNCE_MS = 100; // Prevent duplicate counting
+
+  const handleVisibilityChange = () => {
+    const now = Date.now();
+    
+    if (document.hidden) {
+      // User switched away from tab
+      setIsFocused(false);
+      lastHiddenTime = now;
+    } else {
+      // User came back to tab
+      setIsFocused(true);
+      
+      // Only count if enough time has passed (prevent duplicate events)
+      if (now - lastHiddenTime < DEBOUNCE_MS) {
+        return;
+      }
+      
+      // Increment violation count
+      setTabSwitchCount(prev => {
+        const newCount = prev + 1;
+        
+        if (newCount >= MAX_TAB_SWITCHES) {
+          // Auto-fail on max violations
+          handleTabViolationFail();
+        } else {
+          // Show warning
+          const remainingAttempts = MAX_TAB_SWITCHES - newCount;
+          setTabWarningMessage(
+            `WARNING: Tab switching detected! (${newCount}/${MAX_TAB_SWITCHES})\n` +
+            `You have ${remainingAttempts} warning(s) left. ` +
+            `Switching tabs again will result in automatic failure.`
+          );
+          setShowTabWarning(true);
+          
+          setTimeout(() => setShowTabWarning(false), 5000);
+        }
+        
+        return newCount;
+      });
+    }
+  };
+
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+
+  return () => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+  };
+}, [startedAt, result, handleTabViolationFail]);
+
+// REPLACE the handlePaste function with this MODAL version:
+const handlePaste = (e) => {
+  e.preventDefault();
+  
+  // Show modal instead of alert
+  setShowPasteModal(true);
+  
+  // Visual feedback
+  e.target.style.borderColor = '#ef4444';
+  setTimeout(() => {
+    e.target.style.borderColor = startedAt && !isSubmitting && !(result && result.passed) 
+      ? 'rgba(59, 130, 246, 0.4)' 
+      : '';
+  }, 1000);
+};
+const handleCopy = (e) => {
+  // Allow copying (users might want to copy their own code)
+  console.log('📋 Copy detected - this is allowed');
+};
+
+const handleCut = (e) => {
+  // Allow cutting (users should be able to cut their own code)
+  console.log('✂️ Cut detected - this is allowed');
+};
 
   // Alert handlers
   const handleAlertClose = () => {
@@ -800,6 +982,33 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
           }
+
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+
+          @keyframes slideUp {
+            from {
+              transform: translateY(30px);
+              opacity: 0;
+            }
+            to {
+              transform: translateY(0);
+              opacity: 1;
+            }
+          }
+
+          @keyframes slideInRight {
+            from {
+              transform: translateX(100%);
+              opacity: 0;
+            }
+            to {
+              transform: translateX(0);
+              opacity: 1;
+            }
+          }
         `}</style>
       </div>
     );
@@ -811,7 +1020,7 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
       <div style={styles.container}>
         <div style={styles.modal}>
           <div style={styles.centerContent}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}></div>
             <h3 style={{ color: '#ef4444', marginBottom: '16px' }}>Error Loading Challenge</h3>
             <p style={{ color: '#e2e8f0', marginBottom: '20px' }}>{error}</p>
             <div style={{ marginBottom: '20px', fontSize: '12px', color: '#6b7280' }}>
@@ -923,9 +1132,224 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
     );
   }
 
+  const PasteModal = () => {
+  if (!showPasteModal) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 10001,
+      backdropFilter: 'blur(4px)',
+      animation: 'fadeIn 0.2s ease-out'
+    }}>
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(220, 38, 38, 0.9))',
+        borderRadius: '20px',
+        padding: '32px',
+        maxWidth: '500px',
+        width: '90%',
+        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+        border: '2px solid rgba(255, 255, 255, 0.2)',
+        animation: 'slideUp 0.3s ease-out',
+        position: 'relative'
+      }}>
+        {/* Header */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '16px',
+          marginBottom: '24px'
+        }}>
+          <div style={{
+            width: '60px',
+            height: '60px',
+            borderRadius: '50%',
+            background: 'rgba(255, 255, 255, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <XCircle size={36} color="#fff" />
+          </div>
+          <div>
+            <h3 style={{
+              margin: 0,
+              color: '#fff',
+              fontSize: '24px',
+              fontWeight: 'bold'
+            }}>
+              Paste Disabled
+            </h3>
+            <p style={{
+              margin: '4px 0 0 0',
+              color: 'rgba(255, 255, 255, 0.9)',
+              fontSize: '14px'
+            }}>
+              Challenge Integrity Protection
+            </p>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{
+          color: '#fff',
+          fontSize: '16px',
+          lineHeight: '1.6',
+          marginBottom: '24px'
+        }}>
+          <p style={{ margin: '0 0 12px 0' }}>
+            Pasting code is <strong>not allowed</strong> during the challenge.
+          </p>
+          <p style={{ margin: '0 0 12px 0' }}>
+            Please <strong>type your solution manually</strong> to ensure you understand the code and demonstrate your actual coding skills.
+          </p>
+          <div style={{
+            background: 'rgba(0, 0, 0, 0.3)',
+            padding: '12px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            marginTop: '16px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '8px'
+          }}>
+            <Lightbulb size={18} color="#fbbf24" style={{ flexShrink: 0, marginTop: '2px' }} />
+            <span><strong>Tip:</strong> This measure helps maintain the integrity and fairness of the challenge for all participants.</span>
+          </div>
+        </div>
+
+        {/* Button */}
+        <button
+          onClick={() => setShowPasteModal(false)}
+          style={{
+            width: '100%',
+            padding: '14px',
+            background: 'rgba(255, 255, 255, 0.9)',
+            border: 'none',
+            borderRadius: '12px',
+            color: '#dc2626',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = '#fff';
+            e.target.style.transform = 'translateY(-2px)';
+            e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.3)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = 'rgba(255, 255, 255, 0.9)';
+            e.target.style.transform = 'translateY(0)';
+            e.target.style.boxShadow = 'none';
+          }}
+        >
+          <CheckCircle size={20} />
+          I Understand
+        </button>
+      </div>
+    </div>
+  );
+};
+  const TabWarningModal = () => {
+  if (!showTabWarning) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: '20px',
+      right: '20px',
+      zIndex: 10000,
+      backgroundColor: 'rgba(239, 68, 68, 0.95)',
+      border: '2px solid #ef4444',
+      borderRadius: '12px',
+      padding: '20px',
+      maxWidth: '400px',
+      boxShadow: '0 8px 32px rgba(239, 68, 68, 0.5)',
+      animation: 'slideInRight 0.3s ease-out'
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '12px'
+      }}>
+        <AlertTriangle 
+          size={24} 
+          style={{ 
+            color: '#fff', 
+            flexShrink: 0,
+            marginTop: '2px'
+          }} 
+        />
+        <div style={{ flex: 1 }}>
+          <div style={{
+            color: '#fff',
+            fontSize: '16px',
+            fontWeight: '600',
+            marginBottom: '8px'
+          }}>
+            Tab Switching Detected!
+          </div>
+          <div style={{
+            color: '#fff',
+            fontSize: '14px',
+            lineHeight: '1.5',
+            whiteSpace: 'pre-line'
+          }}>
+            {tabWarningMessage}
+          </div>
+          <div style={{
+            marginTop: '12px',
+            padding: '8px',
+            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+            borderRadius: '6px',
+            fontSize: '12px',
+            color: '#fca5a5'
+          }}>
+            Stay focused on this tab to avoid automatic failure
+          </div>
+        </div>
+        <button
+          onClick={() => setShowTabWarning(false)}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: '#fff',
+            cursor: 'pointer',
+            fontSize: '20px',
+            padding: '0',
+            width: '24px',
+            height: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+};
+
   // Main challenge interface
   return (
     <>
+    <TabWarningModal />
+    <PasteModal />
       <div style={styles.container}>
         <div style={styles.modal}>
           {/* Header */}
@@ -1066,6 +1490,9 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
                 <textarea
                   value={submittedCode}
                   onChange={handleCodeChange}
+                  onPaste={handlePaste}
+                  onCopy={handleCopy}
+                  onCut={handleCut}
                   style={{
                     ...styles.codeEditor,
                     ...((!startedAt || isSubmitting || (result && result.passed)) ? {
@@ -1082,12 +1509,12 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
                   onFocus={(e) => {
                     if (startedAt && !isSubmitting && !(result && result.passed)) {
                       e.target.style.borderColor = 'rgba(59, 130, 246, 0.6)';
-                      e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
                     }
                   }}
                   onBlur={(e) => {
-                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.15)';
-                    e.target.style.boxShadow = 'none';
+                    if (startedAt && !isSubmitting && !(result && result.passed)) {
+                      e.target.style.borderColor = 'rgba(59, 130, 246, 0.4)';
+                    }
                   }}
                 />
                 {!startedAt && (
@@ -1121,7 +1548,7 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
                     </div>
                     {codeValidation.isPlaceholder && (
                       <div style={styles.validationItem}>
-                        <span>⚠️</span>
+                        <span></span>
                         <span>Placeholder detected</span>
                       </div>
                     )}
@@ -1347,7 +1774,7 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
                         Submitting...
                       </>
                     ) : (
-                      '📤 Submit Solution'
+                      'Submit Solution'
                     )}
                   </button>
                 </>
