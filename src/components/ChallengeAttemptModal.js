@@ -1,5 +1,5 @@
 // frontend/src/components/ChallengeAttemptModal.js
-// FINAL FIX - Correct field names for backend
+// FIXED - Correct response structure handling
 import React, { useState } from 'react';
 import { X, Code, Send, CheckCircle, XCircle, Loader, AlertCircle } from 'lucide-react';
 import ChallengeAPI from '../services/challengeAPI';
@@ -32,7 +32,6 @@ const ChallengeAttemptModal = ({ isOpen, onClose, challenge, onComplete }) => {
       console.log('📝 Submitting with language:', languageName);
 
       // ✅ CORRECT - Uses language-based evaluator with proper field names
-      // Don't include project_id if it's null (validation fails on null)
       const payload = {
         challenge_id: challenge.id,
         submitted_code: code,
@@ -43,24 +42,26 @@ const ChallengeAttemptModal = ({ isOpen, onClose, challenge, onComplete }) => {
 
       console.log('📦 Full response:', response);
 
+      // ✅ FIXED - Backend returns { success, message, attempt, evaluation, award }
+      // NOT { success, data: { attempt, evaluation, award } }
       if (response && response.success) {
-        if (response.data && response.data.attempt) {
-          console.log('✅ Challenge completed!', response.data.attempt);
-          setResult(response.data);
+        if (response.attempt) {
+          console.log('✅ Challenge completed!', response.attempt);
+          setResult(response);
           
           // Notify parent component
           if (onComplete) {
-            onComplete(response.data.attempt.id, response.data.attempt.status);
+            onComplete(response.attempt.id, response.attempt.status);
           }
 
           // Auto-close on success after 2 seconds
-          if (response.data.attempt.status === 'passed') {
+          if (response.attempt.status === 'passed') {
             setTimeout(() => {
               onClose();
             }, 2000);
           }
         } else {
-          console.error('❌ Invalid response structure');
+          console.error('❌ Invalid response structure - missing attempt');
           setError('Invalid response from server');
         }
       } else {
@@ -151,54 +152,45 @@ const ChallengeAttemptModal = ({ isOpen, onClose, challenge, onComplete }) => {
           {result && result.attempt && (
             <div style={result.attempt.status === 'passed' ? styles.successResult : styles.failedResult}>
               {result.attempt.status === 'passed' ? (
-                <>
-                  <CheckCircle size={20} />
-                  <div>
-                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>Challenge Passed!</div>
-                    <div style={styles.feedback}>Score: {result.attempt.score}/100</div>
-                    {result.evaluation?.feedback && (
-                      <div style={styles.feedback}>{result.evaluation.feedback}</div>
-                    )}
-                  </div>
-                </>
+                <CheckCircle size={20} />
               ) : (
-                <>
-                  <XCircle size={20} />
-                  <div>
-                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>Challenge Failed</div>
-                    <div style={styles.feedback}>Score: {result.attempt.score}/100</div>
-                    {result.evaluation?.feedback && (
-                      <div style={styles.feedback}>{result.evaluation.feedback}</div>
-                    )}
-                  </div>
-                </>
+                <XCircle size={20} />
               )}
+              <div>
+                <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+                  Score: {result.attempt.score}/100
+                </div>
+                {result.attempt.feedback && (
+                  <div style={styles.feedback}>{result.attempt.feedback}</div>
+                )}
+              </div>
             </div>
           )}
+        </div>
 
-          {/* Actions */}
-          <div style={styles.actions}>
+        {/* Footer */}
+        <div style={styles.footer}>
+          <button
+            style={styles.cancelButton}
+            onClick={onClose}
+            disabled={loading}
+          >
+            {result?.attempt?.status === 'passed' ? 'Close' : 'Cancel'}
+          </button>
+          {(!result || result.attempt.status !== 'passed') && (
             <button
-              style={styles.cancelButton}
-              onClick={onClose}
-              disabled={loading}
-            >
-              Cancel
-            </button>
-            <button
-              style={styles.submitButton}
+              style={{
+                ...styles.submitButton,
+                opacity: loading ? 0.6 : 1,
+                cursor: loading ? 'not-allowed' : 'pointer'
+              }}
               onClick={handleSubmit}
-              disabled={loading || !code.trim() || result?.attempt?.status === 'passed'}
+              disabled={loading}
             >
               {loading ? (
                 <>
                   <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                  Evaluating...
-                </>
-              ) : result?.attempt?.status === 'passed' ? (
-                <>
-                  <CheckCircle size={16} />
-                  Verified
+                  Submitting...
                 </>
               ) : (
                 <>
@@ -207,7 +199,7 @@ const ChallengeAttemptModal = ({ isOpen, onClose, challenge, onComplete }) => {
                 </>
               )}
             </button>
-          </div>
+          )}
         </div>
       </div>
     </div>
@@ -221,58 +213,58 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1100,
-    backdropFilter: 'blur(4px)'
+    zIndex: 1000,
+    padding: '20px'
   },
   modal: {
-    backgroundColor: '#1a1d29',
-    borderRadius: '16px',
-    width: '90%',
-    maxWidth: '700px',
+    backgroundColor: '#1e293b',
+    borderRadius: '12px',
+    maxWidth: '800px',
+    width: '100%',
     maxHeight: '90vh',
-    overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    border: '1px solid rgba(59, 130, 246, 0.3)',
-    boxShadow: '0 25px 50px rgba(0, 0, 0, 0.5)'
+    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+    border: '1px solid rgba(255, 255, 255, 0.1)'
   },
   header: {
     padding: '20px 24px',
     borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.1))'
+    gap: '16px'
   },
   headerContent: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: '12px',
     flex: 1
   },
   title: {
     margin: 0,
-    fontSize: '18px',
+    fontSize: '20px',
     fontWeight: '600',
-    color: '#ffffff'
+    color: '#ffffff',
+    lineHeight: '1.4'
   },
   subtitle: {
-    margin: '4px 0 0 0',
-    fontSize: '13px',
-    color: '#9ca3af',
+    margin: '4px 0 0',
+    fontSize: '14px',
+    color: '#94a3b8',
     textTransform: 'capitalize'
   },
   closeButton: {
-    background: 'transparent',
-    border: 'none',
-    color: '#9ca3af',
-    cursor: 'pointer',
     padding: '8px',
-    borderRadius: '8px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#94a3b8',
+    cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -280,46 +272,48 @@ const styles = {
   },
   content: {
     padding: '24px',
-    overflowY: 'auto',
-    flex: 1
+    flex: 1,
+    overflowY: 'auto'
   },
   section: {
-    marginBottom: '20px'
+    marginBottom: '24px'
   },
   sectionTitle: {
+    margin: '0 0 12px',
     fontSize: '14px',
     fontWeight: '600',
-    color: '#ffffff',
-    marginBottom: '8px',
+    color: '#f1f5f9',
     textTransform: 'uppercase',
     letterSpacing: '0.5px'
   },
   description: {
+    margin: 0,
     fontSize: '14px',
-    color: '#d1d5db',
-    lineHeight: '1.6',
-    margin: 0
+    color: '#cbd5e1',
+    lineHeight: '1.6'
   },
   testCases: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px'
+    gap: '12px'
   },
   testCase: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    padding: '12px',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
     border: '1px solid rgba(255, 255, 255, 0.1)',
-    borderRadius: '8px',
-    padding: '12px'
+    borderRadius: '8px'
   },
   testCaseLabel: {
     fontSize: '12px',
-    color: '#9ca3af',
-    fontWeight: '500',
-    marginBottom: '6px'
+    fontWeight: '600',
+    color: '#94a3b8',
+    marginBottom: '8px',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px'
   },
   testCaseContent: {
     fontSize: '13px',
-    color: '#d1d5db',
+    color: '#cbd5e1',
     fontFamily: 'monospace',
     display: 'flex',
     flexDirection: 'column',
@@ -328,22 +322,23 @@ const styles = {
   codeEditor: {
     width: '100%',
     minHeight: '200px',
-    padding: '16px',
-    backgroundColor: '#0f1116',
+    padding: '12px',
+    backgroundColor: '#0f172a',
     border: '1px solid rgba(255, 255, 255, 0.1)',
     borderRadius: '8px',
-    color: '#ffffff',
+    color: '#e2e8f0',
     fontSize: '14px',
     fontFamily: 'monospace',
-    lineHeight: '1.6',
-    outline: 'none',
     resize: 'vertical',
-    transition: 'all 0.2s'
+    outline: 'none'
   },
-  actions: {
+  footer: {
+    padding: '16px 24px',
+    borderTop: '1px solid rgba(255, 255, 255, 0.1)',
     display: 'flex',
-    gap: '12px',
-    marginTop: '24px'
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: '12px'
   },
   cancelButton: {
     flex: 1,
@@ -412,7 +407,8 @@ const styles = {
   feedback: {
     marginTop: '8px',
     fontSize: '13px',
-    opacity: 0.9
+    opacity: 0.9,
+    whiteSpace: 'pre-line'
   }
 };
 
