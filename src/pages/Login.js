@@ -973,7 +973,7 @@ function Login() {
             marginBottom: '1rem'
           }}>
             <LogIn size={24} color="#60a5fa" />
-            Sign In with TechSync
+            Sign In
           </h2>
           
           {error && <div style={styles.error}>{error}</div>}
@@ -1199,7 +1199,7 @@ function Login() {
           marginBottom: '1rem'
         }}>
           <UserPlus size={24} color="#60a5fa"/>
-          Sign Up with TechSync
+          Sign Up
         </h2>
         
         {error && <div style={styles.error}>{error}</div>}
