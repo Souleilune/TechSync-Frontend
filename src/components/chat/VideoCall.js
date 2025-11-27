@@ -122,15 +122,22 @@ const VideoCall = ({
   const createPeerConnection = useCallback((userId, username) => {
     try {
       const pc = new RTCPeerConnection(iceServers);
-
-      // Add local stream tracks
+  
+      // Add local stream tracks (camera + mic)
       if (localStream) {
         localStream.getTracks().forEach(track => {
           pc.addTrack(track, localStream);
         });
       }
-
-      // Handle ICE candidates
+  
+      // ✅ If screen sharing, also add screen track
+      if (screenStream.current) {
+        screenStream.current.getTracks().forEach(track => {
+          pc.addTrack(track, screenStream.current);
+          console.log(`✅ [VIDEO] Added screen track to new peer ${userId}`);
+        });
+      }
+  
       pc.onicecandidate = (event) => {
         if (event.candidate) {
           socket.emit('video_ice_candidate', {
@@ -141,39 +148,50 @@ const VideoCall = ({
           });
         }
       };
-
-      // ✅ FIX #1: Handle remote stream with username preservation
+  
+      // ✅ CRITICAL: Handle MULTIPLE tracks from same user
       pc.ontrack = (event) => {
-        console.log('📹 [VIDEO] Received remote track from:', username);
-        const stream = event.streams[0];
+        console.log('📹 [VIDEO] Received remote track from:', username, 'kind:', event.track.kind);
+        
+        // Get or create the remote stream
         setRemoteStreams(prev => {
           const newMap = new Map(prev);
-          const existingData = newMap.get(userId) || {};
+          const existingData = newMap.get(userId) || { username };
           
-          // ✅ CRITICAL: Preserve username when updating stream
-          newMap.set(userId, { 
-            stream, 
-            username: existingData.username || username // Keep existing or use new
-          });
+          // If we don't have a stream yet, use the incoming stream
+          if (!existingData.stream) {
+            existingData.stream = event.streams[0];
+          } else {
+            // We already have a stream - add this track to it
+            // This handles the case where screen share comes as additional track
+            const existingStream = existingData.stream;
+            const trackExists = existingStream.getTracks().some(t => t.id === event.track.id);
+            
+            if (!trackExists) {
+              existingStream.addTrack(event.track);
+              console.log(`✅ [VIDEO] Added ${event.track.kind} track to existing stream for ${username}`);
+            }
+          }
+          
+          newMap.set(userId, existingData);
           return newMap;
         });
       };
-
-      // Handle connection state changes
+  
       pc.onconnectionstatechange = () => {
         console.log(`🔌 [VIDEO] Connection state with ${username}:`, pc.connectionState);
         if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
           handleRemoveParticipant(userId);
         }
       };
-
+  
       peerConnections.current.set(userId, pc);
       return pc;
     } catch (error) {
       console.error('❌ [VIDEO] Failed to create peer connection:', error);
       return null;
     }
-  }, [localStream, socket, roomId, projectId]);
+  }, [localStream, screenStream, socket, roomId, projectId]);
 
   // ✅ FIX #2: Handle new participant with username storage
   const handleNewParticipant = useCallback(async (data) => {
@@ -337,9 +355,9 @@ const VideoCall = ({
   const toggleScreenShare = useCallback(async () => {
     try {
       if (!isScreenSharing) {
-        console.log('🖥️ [VIDEO] Starting screen share...');
+        console.log('🖥️ [VIDEO] Starting screen share (keeping camera active)...');
         
-        // Start screen sharing
+        // Get screen share stream
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: { 
             cursor: 'always',
@@ -349,16 +367,14 @@ const VideoCall = ({
         });
   
         screenStream.current = stream;
-  
-        // ✅ DON'T replace tracks - instead, add screen track as additional track
         const screenVideoTrack = stream.getVideoTracks()[0];
-        
-        // Add screen track to all peer connections WITHOUT removing camera track
+  
+        // ✅ CRITICAL: Add screen track WITHOUT removing camera track
         peerConnections.current.forEach((pc, userId) => {
           try {
-            // Add screen track as a NEW track (don't replace camera)
-            const sender = pc.addTrack(screenVideoTrack, stream);
-            console.log(`✅ [VIDEO] Added screen track for user ${userId}`);
+            // Add the screen track as an ADDITIONAL track
+            pc.addTrack(screenVideoTrack, stream);
+            console.log(`✅ [VIDEO] Added screen track to peer ${userId} (camera still active)`);
           } catch (error) {
             console.error(`❌ [VIDEO] Failed to add screen track for ${userId}:`, error);
           }
@@ -384,26 +400,30 @@ const VideoCall = ({
         
         // Stop screen stream
         if (screenStream.current) {
-          screenStream.current.getTracks().forEach(track => {
-            track.stop();
-            console.log('🛑 [VIDEO] Stopped screen track');
-          });
-        }
-  
-        // ✅ Remove screen track from all peer connections
-        peerConnections.current.forEach((pc, userId) => {
-          const senders = pc.getSenders();
-          const screenSender = senders.find(sender => {
-            return sender.track && screenStream.current?.getVideoTracks().includes(sender.track);
+          const screenTrack = screenStream.current.getVideoTracks()[0];
+          
+          // Remove screen track from all peer connections
+          peerConnections.current.forEach((pc, userId) => {
+            try {
+              const senders = pc.getSenders();
+              const screenSender = senders.find(sender => 
+                sender.track && sender.track.id === screenTrack.id
+              );
+              
+              if (screenSender) {
+                pc.removeTrack(screenSender);
+                console.log(`✅ [VIDEO] Removed screen track from peer ${userId} (camera still active)`);
+              }
+            } catch (error) {
+              console.error(`❌ [VIDEO] Failed to remove screen track for ${userId}:`, error);
+            }
           });
           
-          if (screenSender) {
-            pc.removeTrack(screenSender);
-            console.log(`✅ [VIDEO] Removed screen track for user ${userId}`);
-          }
-        });
+          // Stop the screen track
+          screenTrack.stop();
+          screenStream.current = null;
+        }
   
-        screenStream.current = null;
         setIsScreenSharing(false);
         setScreenSharingUser(null);
   
@@ -414,7 +434,7 @@ const VideoCall = ({
           userId: currentUser.id
         });
   
-        console.log('✅ [VIDEO] Screen share stopped, camera remains active');
+        console.log('✅ [VIDEO] Screen share stopped, camera still active');
       }
     } catch (error) {
       console.error('❌ [VIDEO] Screen share error:', error);
