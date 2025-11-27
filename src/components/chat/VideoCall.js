@@ -48,14 +48,33 @@ const VideoCall = ({
   const containerRef = useRef(null);
   const pendingCandidates = useRef(new Map()); // ✅ FIX #5: Store candidates until PC ready
 
-  // ICE servers configuration with multiple STUN servers
+  // ICE servers configuration with STUN + TURN servers
+  // TURN servers relay traffic when direct peer-to-peer fails (DTLS issues)
   const iceServers = {
     iceServers: [
+      // STUN servers for NAT traversal
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
       { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' }
+      { urls: 'stun:stun4.l.google.com:19302' },
+      
+      // ✅ TURN servers for relay (fixes DTLS failures)
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
     ],
     iceCandidatePoolSize: 10
   };
@@ -143,6 +162,13 @@ const VideoCall = ({
       console.log(`🔗 [VIDEO] Creating new peer connection for ${username} (${userId})`);
       
       pc = new RTCPeerConnection(iceServers);
+      
+      // ✅ PERFECT NEGOTIATION: Add per-peer state flags
+      pc.makingOffer = false;  // Track if we're currently making an offer
+      pc.polite = currentUser.id < userId;  // Compute and store politeness once
+      pc.lastRemoteSdpId = null;  // Track last applied SDP to avoid duplicates
+      
+      console.log(`🤝 [VIDEO] Peer ${username} - We are ${pc.polite ? 'polite' : 'impolite'}`);
 
       // Add local stream tracks
       localStream.getTracks().forEach(track => {
@@ -152,17 +178,24 @@ const VideoCall = ({
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
+          // ✅ Log proper ICE candidate fields (candidate string, sdpMid, sdpMLineIndex)
           console.log(`🧊 [VIDEO] Sending ICE candidate to ${username}:`, {
-            type: event.candidate.type,
-            protocol: event.candidate.protocol,
-            address: event.candidate.address,
-            port: event.candidate.port
+            candidate: event.candidate.candidate,
+            sdpMid: event.candidate.sdpMid,
+            sdpMLineIndex: event.candidate.sdpMLineIndex
           });
+          
+          // ✅ Send complete candidate structure
           socket.emit('video_ice_candidate', {
             roomId,
             projectId,
             targetUserId: userId,
-            candidate: event.candidate
+            candidate: {
+              candidate: event.candidate.candidate,
+              sdpMid: event.candidate.sdpMid,
+              sdpMLineIndex: event.candidate.sdpMLineIndex,
+              usernameFragment: event.candidate.usernameFragment
+            }
           });
         } else {
           console.log(`✅ [VIDEO] All ICE candidates sent to ${username}`);
@@ -276,7 +309,13 @@ const VideoCall = ({
       if (pending && pending.length > 0) {
         console.log(`🧊 [VIDEO] Processing ${pending.length} pending ICE candidates for ${username}`);
         pending.forEach(candidate => {
-          pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+          const iceCandidate = new RTCIceCandidate({
+            candidate: candidate.candidate,
+            sdpMid: candidate.sdpMid,
+            sdpMLineIndex: candidate.sdpMLineIndex,
+            usernameFragment: candidate.usernameFragment
+          });
+          pc.addIceCandidate(iceCandidate).catch(err => {
             console.error(`❌ [VIDEO] Failed to add pending ICE candidate:`, err);
           });
         });
@@ -311,64 +350,84 @@ const VideoCall = ({
     if (!pc) return;
 
     try {
+      // ✅ PERFECT NEGOTIATION: Set makingOffer flag
+      pc.makingOffer = true;
+      
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      
+      // Generate unique SDP ID to track duplicates
+      const sdpId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       socket.emit('video_offer', {
         roomId,
         projectId,
         targetUserId: userId,
-        offer: pc.localDescription
+        offer: pc.localDescription,
+        sdpId  // ✅ Include sdpId for duplicate detection
       });
       
-      console.log(`✅ [VIDEO] Sent offer to ${username}`);
+      console.log(`✅ [VIDEO] Sent offer to ${username} (sdpId: ${sdpId})`);
     } catch (error) {
       console.error(`❌ [VIDEO] Failed to create offer for ${username}:`, error);
+    } finally {
+      // ✅ Always clear makingOffer flag
+      pc.makingOffer = false;
     }
   }, [currentUser.id, getOrCreatePeerConnection, socket, roomId, projectId]);
 
   const handleVideoOffer = useCallback(async (data) => {
-    const { userId, username, offer } = data;
+    const { userId, username, offer, sdpId } = data;
     
-    console.log(`📨 [VIDEO] Received offer from ${username}`);
+    console.log(`📨 [VIDEO] Received offer from ${username} (sdpId: ${sdpId || 'none'})`);
 
     const pc = getOrCreatePeerConnection(userId, username);
     if (!pc) return;
 
     try {
-      // ✅ PERFECT NEGOTIATION: Handle all signaling states properly
-      const signalingState = pc.signalingState;
-      console.log(`📡 [VIDEO] Current signaling state: ${signalingState}`);
+      // ✅ PERFECT NEGOTIATION: Check for duplicate SDP
+      if (sdpId && pc.lastRemoteSdpId === sdpId) {
+        console.warn(`⚠️ [VIDEO] Ignoring duplicate offer from ${username} (sdpId: ${sdpId})`);
+        return;
+      }
       
-      // Determine politeness based on user IDs (lower ID = polite)
-      const isPolite = currentUser.id < userId;
+      // ✅ PERFECT NEGOTIATION: Use stored politeness flag
+      const isPolite = pc.polite;
       
-      // Check for collision
-      const offerCollision = signalingState !== 'stable' && signalingState !== 'have-remote-offer';
+      // ✅ PERFECT NEGOTIATION: Check for offer collision using makingOffer
+      const offerCollision = (pc.signalingState !== 'stable' || pc.makingOffer);
+      
+      console.log(`📡 [VIDEO] Signaling state: ${pc.signalingState}, makingOffer: ${pc.makingOffer}`);
       
       if (offerCollision) {
-        console.warn(`⚠️ [VIDEO] Offer collision detected! State: ${signalingState}`);
+        console.warn(`⚠️ [VIDEO] Offer collision detected!`);
         console.log(`🤝 [VIDEO] We are ${isPolite ? 'polite' : 'impolite'}`);
         
-        if (isPolite) {
-          // Polite: Must rollback our pending offer before accepting incoming offer
-          console.log(`🤝 [VIDEO] Polite: Rolling back local offer`);
-          try {
-            await pc.setLocalDescription({type: 'rollback'});
-            console.log(`✅ [VIDEO] Successfully rolled back local offer`);
-          } catch (rollbackError) {
-            console.error(`❌ [VIDEO] Rollback failed:`, rollbackError);
-            // Continue anyway, might still work
-          }
-        } else {
-          // Impolite: Continue with incoming offer
-          console.log(`🤝 [VIDEO] Impolite: Continuing with incoming offer anyway`);
+        if (!isPolite) {
+          // Impolite: Ignore incoming offer during collision
+          console.log(`🤝 [VIDEO] Impolite: Ignoring incoming offer`);
+          return;
+        }
+        
+        // Polite: Rollback and accept incoming offer
+        console.log(`🤝 [VIDEO] Polite: Rolling back local offer`);
+        try {
+          await pc.setLocalDescription({type: 'rollback'});
+          console.log(`✅ [VIDEO] Successfully rolled back local offer`);
+        } catch (rollbackError) {
+          console.error(`❌ [VIDEO] Rollback failed:`, rollbackError);
+          // Continue anyway
         }
       }
       
-      // Always process the offer (both polite and impolite)
+      // Set remote description
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       console.log(`✅ [VIDEO] Set remote description from offer`);
+      
+      // ✅ Track this SDP ID to avoid duplicates
+      if (sdpId) {
+        pc.lastRemoteSdpId = sdpId;
+      }
       
       // ✅ Process any pending ICE candidates now that remote description is set
       const pending = pendingCandidates.current.get(userId);
@@ -376,7 +435,13 @@ const VideoCall = ({
         console.log(`🧊 [VIDEO] Processing ${pending.length} pending ICE candidates for ${username}`);
         for (const candidate of pending) {
           try {
-            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            const iceCandidate = new RTCIceCandidate({
+              candidate: candidate.candidate,
+              sdpMid: candidate.sdpMid,
+              sdpMLineIndex: candidate.sdpMLineIndex,
+              usernameFragment: candidate.usernameFragment
+            });
+            await pc.addIceCandidate(iceCandidate);
           } catch (err) {
             console.error(`❌ [VIDEO] Failed to add pending candidate:`, err);
           }
@@ -384,29 +449,34 @@ const VideoCall = ({
         pendingCandidates.current.delete(userId);
       }
       
+      // Create and send answer
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       console.log(`✅ [VIDEO] Created and set answer`);
+      
+      // Generate unique SDP ID for answer
+      const answerSdpId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       socket.emit('video_answer', {
         roomId,
         projectId,
         targetUserId: userId,
-        answer: pc.localDescription
+        answer: pc.localDescription,
+        sdpId: answerSdpId  // ✅ Include sdpId
       });
       
-      console.log(`✅ [VIDEO] Sent answer to ${username}`);
+      console.log(`✅ [VIDEO] Sent answer to ${username} (sdpId: ${answerSdpId})`);
 
       setParticipants(prev => [...prev.filter(p => p.userId !== userId), { userId, username }]);
     } catch (error) {
       console.error(`❌ [VIDEO] Failed to handle offer from ${username}:`, error);
     }
-  }, [getOrCreatePeerConnection, socket, roomId, projectId, currentUser.id]);
+  }, [getOrCreatePeerConnection, socket, roomId, projectId]);
 
   const handleVideoAnswer = useCallback(async (data) => {
-    const { userId, answer } = data;
+    const { userId, answer, sdpId } = data;
     
-    console.log(`📨 [VIDEO] Received answer from user ${userId}`);
+    console.log(`📨 [VIDEO] Received answer from user ${userId} (sdpId: ${sdpId || 'none'})`);
 
     const pc = peerConnections.current.get(userId);
     if (!pc) {
@@ -415,7 +485,12 @@ const VideoCall = ({
     }
 
     try {
-      // ✅ FIX: Check signaling state before setting remote description
+      // ✅ PERFECT NEGOTIATION: Check for duplicate SDP
+      if (sdpId && pc.lastRemoteSdpId === sdpId) {
+        console.warn(`⚠️ [VIDEO] Ignoring duplicate answer (sdpId: ${sdpId})`);
+        return;
+      }
+      
       console.log(`📡 [VIDEO] Current signaling state: ${pc.signalingState}`);
       
       if (pc.signalingState === 'stable') {
@@ -430,13 +505,24 @@ const VideoCall = ({
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
       console.log(`✅ [VIDEO] Set remote description from answer`);
       
+      // ✅ Track this SDP ID to avoid duplicates
+      if (sdpId) {
+        pc.lastRemoteSdpId = sdpId;
+      }
+      
       // ✅ Process any pending ICE candidates now that remote description is set
       const pending = pendingCandidates.current.get(userId);
       if (pending && pending.length > 0) {
         console.log(`🧊 [VIDEO] Processing ${pending.length} pending ICE candidates`);
         for (const candidate of pending) {
           try {
-            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            const iceCandidate = new RTCIceCandidate({
+              candidate: candidate.candidate,
+              sdpMid: candidate.sdpMid,
+              sdpMLineIndex: candidate.sdpMLineIndex,
+              usernameFragment: candidate.usernameFragment
+            });
+            await pc.addIceCandidate(iceCandidate);
           } catch (err) {
             console.error(`❌ [VIDEO] Failed to add pending candidate:`, err);
           }
@@ -474,8 +560,20 @@ const VideoCall = ({
     }
 
     try {
-      await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      console.log(`🧊 [VIDEO] Added ICE candidate from user ${userId}:`, candidate);
+      // ✅ PERFECT NEGOTIATION: Properly construct RTCIceCandidate with explicit fields
+      const iceCandidate = new RTCIceCandidate({
+        candidate: candidate.candidate,
+        sdpMid: candidate.sdpMid,
+        sdpMLineIndex: candidate.sdpMLineIndex,
+        usernameFragment: candidate.usernameFragment
+      });
+      
+      await pc.addIceCandidate(iceCandidate);
+      console.log(`🧊 [VIDEO] Added ICE candidate from user ${userId}:`, {
+        candidate: candidate.candidate,
+        sdpMid: candidate.sdpMid,
+        sdpMLineIndex: candidate.sdpMLineIndex
+      });
     } catch (error) {
       console.error(`❌ [VIDEO] Failed to add ICE candidate from ${userId}:`, error);
       console.error(`❌ [VIDEO] PC state: signaling=${pc.signalingState}, ice=${pc.iceConnectionState}`);
