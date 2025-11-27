@@ -337,6 +337,8 @@ const VideoCall = ({
   const toggleScreenShare = useCallback(async () => {
     try {
       if (!isScreenSharing) {
+        console.log('🖥️ [VIDEO] Starting screen share...');
+        
         // Start screen sharing
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: { 
@@ -348,17 +350,22 @@ const VideoCall = ({
   
         screenStream.current = stream;
   
-        // Replace video track in all peer connections
-        const videoTrack = stream.getVideoTracks()[0];
-        peerConnections.current.forEach(pc => {
-          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-          if (sender) {
-            sender.replaceTrack(videoTrack);
+        // ✅ DON'T replace tracks - instead, add screen track as additional track
+        const screenVideoTrack = stream.getVideoTracks()[0];
+        
+        // Add screen track to all peer connections WITHOUT removing camera track
+        peerConnections.current.forEach((pc, userId) => {
+          try {
+            // Add screen track as a NEW track (don't replace camera)
+            const sender = pc.addTrack(screenVideoTrack, stream);
+            console.log(`✅ [VIDEO] Added screen track for user ${userId}`);
+          } catch (error) {
+            console.error(`❌ [VIDEO] Failed to add screen track for ${userId}:`, error);
           }
         });
   
         // Handle stream end (user clicks "Stop sharing" in browser)
-        videoTrack.onended = () => {
+        screenVideoTrack.onended = () => {
           toggleScreenShare();
         };
   
@@ -373,46 +380,30 @@ const VideoCall = ({
         });
   
       } else {
-        // Stop screen sharing
-        console.log('🛑 [VIDEO] Stopping screen share, restoring camera...');
+        console.log('🛑 [VIDEO] Stopping screen share...');
         
-        // Stop screen stream tracks
+        // Stop screen stream
         if (screenStream.current) {
           screenStream.current.getTracks().forEach(track => {
-            console.log('🛑 [VIDEO] Stopping screen track:', track.kind);
             track.stop();
+            console.log('🛑 [VIDEO] Stopped screen track');
           });
-          screenStream.current = null;
         }
   
-        // Restore camera video track to peer connections
-        if (localStream && localStream.getVideoTracks().length > 0) {
-          const cameraVideoTrack = localStream.getVideoTracks()[0];
-          console.log('📹 [VIDEO] Restoring camera track, enabled:', cameraVideoTrack.enabled);
-          
-          // Ensure camera track is enabled (respect current video on/off state)
-          cameraVideoTrack.enabled = !isVideoOff;
-          
-          // Replace screen share track with camera track in all peer connections
-          peerConnections.current.forEach(pc => {
-            const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-            if (sender) {
-              console.log('🔄 [VIDEO] Replacing screen track with camera track');
-              sender.replaceTrack(cameraVideoTrack)
-                .then(() => console.log('✅ [VIDEO] Camera track restored successfully'))
-                .catch(err => console.error('❌ [VIDEO] Failed to restore camera:', err));
-            }
+        // ✅ Remove screen track from all peer connections
+        peerConnections.current.forEach((pc, userId) => {
+          const senders = pc.getSenders();
+          const screenSender = senders.find(sender => {
+            return sender.track && screenStream.current?.getVideoTracks().includes(sender.track);
           });
-  
-          // Ensure local video element shows the camera stream
-          if (localVideoRef.current && localVideoRef.current.srcObject !== localStream) {
-            console.log('🎥 [VIDEO] Re-attaching local stream to video element');
-            localVideoRef.current.srcObject = localStream;
+          
+          if (screenSender) {
+            pc.removeTrack(screenSender);
+            console.log(`✅ [VIDEO] Removed screen track for user ${userId}`);
           }
-        } else {
-          console.error('❌ [VIDEO] No local camera stream available to restore!');
-        }
+        });
   
+        screenStream.current = null;
         setIsScreenSharing(false);
         setScreenSharingUser(null);
   
@@ -423,23 +414,22 @@ const VideoCall = ({
           userId: currentUser.id
         });
   
-        console.log('✅ [VIDEO] Screen share stopped, camera restored');
+        console.log('✅ [VIDEO] Screen share stopped, camera remains active');
       }
     } catch (error) {
       console.error('❌ [VIDEO] Screen share error:', error);
       
-      // Reset states on error
       if (isScreenSharing) {
         setIsScreenSharing(false);
         setScreenSharingUser(null);
         
-        // Try to restore camera on error
-        if (localStream && localVideoRef.current) {
-          localVideoRef.current.srcObject = localStream;
+        if (screenStream.current) {
+          screenStream.current.getTracks().forEach(track => track.stop());
+          screenStream.current = null;
         }
       }
     }
-  }, [isScreenSharing, localStream, isVideoOff, socket, roomId, projectId, currentUser.id]);
+  }, [isScreenSharing, socket, roomId, projectId, currentUser.id]);
 
   // Toggle fullscreen
   const toggleFullScreen = useCallback(() => {
