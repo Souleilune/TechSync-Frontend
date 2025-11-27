@@ -1,4 +1,5 @@
 // frontend/src/components/chat/VideoCall.js
+// ✅ PRODUCTION VERSION WITH CRITICAL FIXES APPLIED
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import VideoCallChat from './VideoCallChat';
 import { 
@@ -141,13 +142,19 @@ const VideoCall = ({
         }
       };
 
-      // Handle remote stream
+      // ✅ FIX #1: Handle remote stream with username preservation
       pc.ontrack = (event) => {
         console.log('📹 [VIDEO] Received remote track from:', username);
         const stream = event.streams[0];
         setRemoteStreams(prev => {
           const newMap = new Map(prev);
-          newMap.set(userId, { stream, username });
+          const existingData = newMap.get(userId) || {};
+          
+          // ✅ CRITICAL: Preserve username when updating stream
+          newMap.set(userId, { 
+            stream, 
+            username: existingData.username || username // Keep existing or use new
+          });
           return newMap;
         });
       };
@@ -168,7 +175,7 @@ const VideoCall = ({
     }
   }, [localStream, socket, roomId, projectId]);
 
-  // Handle new participant joining
+  // ✅ FIX #2: Handle new participant with username storage
   const handleNewParticipant = useCallback(async (data) => {
     const { userId, username } = data;
     
@@ -176,6 +183,16 @@ const VideoCall = ({
 
     console.log('👤 [VIDEO] New participant:', username);
     setParticipants(prev => [...prev.filter(p => p.userId !== userId), { userId, username }]);
+
+    // ✅ CRITICAL: Store username in remoteStreams immediately
+    setRemoteStreams(prev => {
+      const newMap = new Map(prev);
+      newMap.set(userId, { 
+        stream: null, // Will be set when tracks arrive
+        username: username 
+      });
+      return newMap;
+    });
 
     const pc = createPeerConnection(userId, username);
     if (!pc) return;
@@ -272,25 +289,49 @@ const VideoCall = ({
     setParticipants(prev => prev.filter(p => p.userId !== userId));
   }, []);
 
-  // Toggle mute
+  // ✅ FIX #3: Toggle mute with socket notification
   const toggleMute = useCallback(() => {
     if (localStream) {
-      localStream.getAudioTracks().forEach(track => {
-        track.enabled = !track.enabled;
-      });
-      setIsMuted(!isMuted);
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setIsMuted(!audioTrack.enabled);
+        
+        console.log('🎤 [VIDEO] Microphone toggled:', audioTrack.enabled ? 'ON' : 'OFF');
+        
+        // ✅ CRITICAL: Notify other participants
+        socket.emit('video_track_toggle', {
+          roomId,
+          projectId,
+          userId: currentUser.id,
+          trackKind: 'audio',
+          enabled: audioTrack.enabled
+        });
+      }
     }
-  }, [localStream, isMuted]);
+  }, [localStream, socket, roomId, projectId, currentUser.id]);
 
-  // Toggle video
+  // ✅ FIX #4: Toggle video with socket notification
   const toggleVideo = useCallback(() => {
     if (localStream) {
-      localStream.getVideoTracks().forEach(track => {
-        track.enabled = !track.enabled;
-      });
-      setIsVideoOff(!isVideoOff);
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        setIsVideoOff(!videoTrack.enabled);
+        
+        console.log('📹 [VIDEO] Camera toggled:', videoTrack.enabled ? 'ON' : 'OFF');
+        
+        // ✅ CRITICAL: Notify other participants
+        socket.emit('video_track_toggle', {
+          roomId,
+          projectId,
+          userId: currentUser.id,
+          trackKind: 'video',
+          enabled: videoTrack.enabled
+        });
+      }
     }
-  }, [localStream, isVideoOff]);
+  }, [localStream, socket, roomId, projectId, currentUser.id]);
 
   // Toggle screen sharing
   const toggleScreenShare = useCallback(async () => {
@@ -440,7 +481,7 @@ const VideoCall = ({
     onEndCall();
   }, [localStream, socket, roomId, projectId, currentUser.id, onEndCall]);
 
-  // Setup socket listeners
+  // ✅ FIX #5: Setup socket listeners with screen share and track toggle
   useEffect(() => {
     if (!socket) return;
 
@@ -449,15 +490,55 @@ const VideoCall = ({
     socket.on('video_answer', handleVideoAnswer);
     socket.on('video_ice_candidate', handleIceCandidate);
     socket.on('video_participant_left', (data) => handleRemoveParticipant(data.userId));
+    
+    // Screen share listeners
+    socket.on('screen_share_started', (data) => {
+      console.log('🖥️ [VIDEO] Remote user started sharing:', data.userId);
+      setScreenSharingUser(data.userId);
+    });
+  
+    socket.on('screen_share_stopped', (data) => {
+      console.log('🖥️ [VIDEO] Remote user stopped sharing:', data.userId);
+      if (screenSharingUser === data.userId) {
+        setScreenSharingUser(null);
+      }
+    });
 
+    // ✅ CRITICAL: Video track toggle listener (camera/mic on/off)
+    socket.on('video_track_toggle', (data) => {
+      const { userId, trackKind, enabled } = data;
+      console.log(`🎥 [VIDEO] Remote ${trackKind} toggle from ${userId}: ${enabled ? 'ON' : 'OFF'}`);
+      
+      setRemoteStreams(prev => {
+        const newMap = new Map(prev);
+        const remoteData = newMap.get(userId);
+        
+        if (remoteData?.stream) {
+          const tracks = trackKind === 'video' 
+            ? remoteData.stream.getVideoTracks() 
+            : remoteData.stream.getAudioTracks();
+          
+          tracks.forEach(track => {
+            track.enabled = enabled;
+            console.log(`✅ [VIDEO] Updated ${trackKind} track for ${userId}: enabled=${track.enabled}`);
+          });
+        }
+        
+        return newMap;
+      });
+    });
+  
     return () => {
       socket.off('video_participant_joined', handleNewParticipant);
       socket.off('video_offer', handleVideoOffer);
       socket.off('video_answer', handleVideoAnswer);
       socket.off('video_ice_candidate', handleIceCandidate);
       socket.off('video_participant_left');
+      socket.off('screen_share_started');
+      socket.off('screen_share_stopped');
+      socket.off('video_track_toggle'); // ✅ CRITICAL: Cleanup
     };
-  }, [socket, handleNewParticipant, handleVideoOffer, handleVideoAnswer, handleIceCandidate, handleRemoveParticipant]);
+  }, [socket, handleNewParticipant, handleVideoOffer, handleVideoAnswer, handleIceCandidate, handleRemoveParticipant, screenSharingUser]);
 
   // Initialize media on mount
   useEffect(() => {
@@ -487,39 +568,6 @@ const VideoCall = ({
       }
     };
   }, []); // Empty dependency array - only run once on mount
-  useEffect(() => {
-    if (!socket) return;
-  
-    socket.on('video_participant_joined', handleNewParticipant);
-    socket.on('video_offer', handleVideoOffer);
-    socket.on('video_answer', handleVideoAnswer);
-    socket.on('video_ice_candidate', handleIceCandidate);
-    socket.on('video_participant_left', (data) => handleRemoveParticipant(data.userId));
-    
-    // ✅ ADD THESE SCREEN SHARE LISTENERS HERE:
-    socket.on('screen_share_started', (data) => {
-      console.log('🖥️ [VIDEO] Remote user started sharing:', data.userId);
-      setScreenSharingUser(data.userId);
-    });
-  
-    socket.on('screen_share_stopped', (data) => {
-      console.log('🖥️ [VIDEO] Remote user stopped sharing:', data.userId);
-      if (screenSharingUser === data.userId) {
-        setScreenSharingUser(null);
-      }
-    });
-  
-    return () => {
-      socket.off('video_participant_joined', handleNewParticipant);
-      socket.off('video_offer', handleVideoOffer);
-      socket.off('video_answer', handleVideoAnswer);
-      socket.off('video_ice_candidate', handleIceCandidate);
-      socket.off('video_participant_left');
-      // ✅ ADD CLEANUP FOR SCREEN SHARE LISTENERS:
-      socket.off('screen_share_started');
-      socket.off('screen_share_stopped');
-    };
-  }, [socket, handleNewParticipant, handleVideoOffer, handleVideoAnswer, handleIceCandidate, handleRemoveParticipant, screenSharingUser]);
 
   useEffect(() => {
     if (localStream && localVideoRef.current) {
@@ -640,7 +688,7 @@ const VideoCall = ({
             style={{
               width: '100%',
               height: '100%',
-              objectFit: 'contain', // ✅ Changed from 'cover' to 'contain' for screen
+              objectFit: 'contain',
               backgroundColor: '#000'
             }}
           />
@@ -658,7 +706,7 @@ const VideoCall = ({
             style={{
               width: '100%',
               height: '100%',
-              objectFit: 'contain', // ✅ Changed from 'cover' to 'contain' for screen
+              objectFit: 'contain',
               backgroundColor: '#000'
             }}
           />
@@ -678,6 +726,7 @@ const VideoCall = ({
           gap: '8px'
         }}>
           <Monitor size={16} />
+          {/* ✅ FIX: This will now show correct username instead of "undefined" */}
           {screenSharingUser === 'local' ? 'You are sharing your screen' : 
            `${remoteStreams.get(screenSharingUser)?.username} is sharing`}
         </div>
