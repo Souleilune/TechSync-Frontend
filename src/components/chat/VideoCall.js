@@ -527,55 +527,6 @@ const VideoCall = ({
         return newMap;
       });
     });
-
-    socket.on('video_current_participants', async (data) => {
-      console.log('👥 [VIDEO] Received current participants:', data.participants);
-      
-      const { participants: currentParticipants } = data;
-      
-      // For each existing participant, create peer connection and send offer
-      for (const participant of currentParticipants) {
-        const { userId, username } = participant;
-        
-        if (userId === currentUser.id) continue;
-        
-        console.log('👤 [VIDEO] Creating connection to existing participant:', username);
-        
-        // Add to participants list
-        setParticipants(prev => [...prev.filter(p => p.userId !== userId), { userId, username }]);
-        
-        // Store username in remoteStreams
-        setRemoteStreams(prev => {
-          const newMap = new Map(prev);
-          newMap.set(userId, { 
-            stream: null,
-            username: username 
-          });
-          return newMap;
-        });
-        
-        // Create peer connection
-        const pc = createPeerConnection(userId, username);
-        if (!pc) continue;
-        
-        try {
-          // Create and send offer
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          
-          socket.emit('video_offer', {
-            roomId,
-            projectId,
-            targetUserId: userId,
-            offer: pc.localDescription
-          });
-          
-          console.log('✅ [VIDEO] Sent offer to existing participant:', username);
-        } catch (error) {
-          console.error('❌ [VIDEO] Failed to create offer for existing participant:', error);
-        }
-      }
-    });
   
     return () => {
       socket.off('video_participant_joined', handleNewParticipant);
@@ -585,8 +536,7 @@ const VideoCall = ({
       socket.off('video_participant_left');
       socket.off('screen_share_started');
       socket.off('screen_share_stopped');
-      socket.off('video_track_toggle');
-      socket.off('video_current_participants');
+      socket.off('video_track_toggle'); // ✅ CRITICAL: Cleanup
     };
   }, [socket, handleNewParticipant, handleVideoOffer, handleVideoAnswer, handleIceCandidate, handleRemoveParticipant, screenSharingUser]);
 
