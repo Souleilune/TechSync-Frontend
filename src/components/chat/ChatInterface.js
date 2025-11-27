@@ -41,6 +41,7 @@ const ChatInterface = ({ projectId }) => {
   const [editingMessage, setEditingMessage] = useState(null);
   const [replyingTo, setReplyingTo] = useState(null);
   const [typingTimer, setTypingTimer] = useState(null);
+  const [activeVideoCalls, setActiveVideoCalls] = useState(new Map()); // roomId -> participantCount
 
   const messagesEndRef = useRef(null);
   const messageInputRef = useRef(null);
@@ -88,6 +89,34 @@ const ChatInterface = ({ projectId }) => {
       fetchMessages(projectId, activeRoom);
     }
   }, [activeRoom, projectId, fetchMessages]);
+
+  useEffect(() => {
+    if (!socket || !connected) return;
+  
+    // Request initial active calls when joining project
+    if (currentProject) {
+      socket.emit('get_active_video_calls', { projectId: currentProject });
+    }
+  
+    // Listen for updates
+    socket.on('active_video_calls_updated', (data) => {
+      const { activeVideoCalls: calls } = data;
+      
+      console.log('📹 [ACTIVE CALLS] Updated:', calls);
+      
+      // Convert array to Map for easy lookup
+      const callsMap = new Map();
+      calls.forEach(call => {
+        callsMap.set(call.roomId, call.participantCount);
+      });
+      
+      setActiveVideoCalls(callsMap);
+    });
+  
+    return () => {
+      socket.off('active_video_calls_updated');
+    };
+  }, [socket, connected, currentProject]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -311,33 +340,94 @@ const ChatInterface = ({ projectId }) => {
 
         {/* Room List */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {chatRooms.map((room) => (
-            <button
-              key={room.id}
-              onClick={() => setActiveRoom(room.id)}
-              style={{
-                width: '100%',
-                padding: '16px 20px',
-                textAlign: 'left',
-                backgroundColor: activeRoom === room.id ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-                border: 'none',
-                borderLeft: activeRoom === room.id ? '4px solid #3b82f6' : '4px solid transparent',
-                cursor: 'pointer',
-                color: activeRoom === room.id ? '#60a5fa' : '#d1d5db',
-                transition: 'all 0.3s ease'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                <span>#</span>
-                <span style={{ fontWeight: '500' }}>{room.name}</span>
-              </div>
-              {room.description && (
-                <p style={{ fontSize: '12px', color: '#9ca3af', margin: 0, paddingLeft: '20px' }}>
-                  {room.description}
-                </p>
-              )}
-            </button>
-          ))}
+          {chatRooms.map((room) => {
+            const hasActiveCall = activeVideoCalls.has(room.id);
+            const participantCount = activeVideoCalls.get(room.id) || 0;
+            
+            return (
+              <button
+                key={room.id}
+                onClick={() => setActiveRoom(room.id)}
+                style={{
+                  width: '100%',
+                  padding: '16px 20px',
+                  textAlign: 'left',
+                  backgroundColor: activeRoom === room.id ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                  border: 'none',
+                  borderLeft: activeRoom === room.id ? '4px solid #3b82f6' : '4px solid transparent',
+                  cursor: 'pointer',
+                  color: activeRoom === room.id ? '#60a5fa' : '#9ca3af',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  position: 'relative'
+                }}
+                onMouseEnter={(e) => {
+                  if (activeRoom !== room.id) {
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeRoom !== room.id) {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                  width: '100%'
+                }}>
+                  <span style={{ 
+                    fontWeight: activeRoom === room.id ? '600' : '500',
+                    fontSize: '15px'
+                  }}>
+                    # {room.name}
+                  </span>
+                  
+                  {/* Video Call Indicator */}
+                  {hasActiveCall && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '4px 10px',
+                      backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                      border: '1px solid rgba(16, 185, 129, 0.3)',
+                      borderRadius: '12px',
+                      fontSize: '11px',
+                      fontWeight: '600',
+                      color: '#10b981'
+                    }}>
+                      <div style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        backgroundColor: '#10b981',
+                        animation: 'pulse 2s ease-in-out infinite'
+                      }} />
+                      <Video size={12} />
+                      <span>{participantCount}</span>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Show "Video call in progress" on hover when call is active */}
+                {hasActiveCall && activeRoom !== room.id && (
+                  <span style={{
+                    fontSize: '12px',
+                    color: '#10b981',
+                    fontWeight: '500',
+                    opacity: 0.8
+                  }}>
+                    Video call in progress
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Online Users */}
