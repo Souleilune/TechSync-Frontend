@@ -1,5 +1,6 @@
 // frontend/src/components/chat/VideoCall.js
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import VideoCallChat from './VideoCallChat';
 import { 
   Video, 
   VideoOff, 
@@ -292,86 +293,113 @@ const VideoCall = ({
   }, [localStream, isVideoOff]);
 
   // Toggle screen sharing
-const toggleScreenShare = useCallback(async () => {
-  try {
-    if (!isScreenSharing) {
-      // Start screen sharing
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { 
-          cursor: 'always',
-          displaySurface: 'monitor' // Prefer full screen
-        },
-        audio: false
-      });
-
-      screenStream.current = stream;
-
-      // Replace video track in all peer connections
-      const videoTrack = stream.getVideoTracks()[0];
-      peerConnections.current.forEach(pc => {
-        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) {
-          sender.replaceTrack(videoTrack);
-        }
-      });
-
-      // Handle stream end
-      videoTrack.onended = () => {
-        toggleScreenShare();
-      };
-
-      setIsScreenSharing(true);
-      setScreenSharingUser('local'); // Mark local user as sharing
-
-      // Notify other participants
-      socket.emit('screen_share_started', {
-        roomId,
-        projectId,
-        userId: currentUser.id
-      });
-
-    } else {
-      // Stop screen sharing
-      if (screenStream.current) {
-        screenStream.current.getTracks().forEach(track => track.stop());
-      }
-
-      // Switch back to camera
-      if (localStream) {
-        const videoTrack = localStream.getVideoTracks()[0];
+  const toggleScreenShare = useCallback(async () => {
+    try {
+      if (!isScreenSharing) {
+        // Start screen sharing
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { 
+            cursor: 'always',
+            displaySurface: 'monitor'
+          },
+          audio: false
+        });
+  
+        screenStream.current = stream;
+  
+        // Replace video track in all peer connections
+        const videoTrack = stream.getVideoTracks()[0];
         peerConnections.current.forEach(pc => {
           const sender = pc.getSenders().find(s => s.track?.kind === 'video');
           if (sender) {
             sender.replaceTrack(videoTrack);
           }
         });
+  
+        // Handle stream end (user clicks "Stop sharing" in browser)
+        videoTrack.onended = () => {
+          toggleScreenShare();
+        };
+  
+        setIsScreenSharing(true);
+        setScreenSharingUser('local');
+  
+        // Notify other participants
+        socket.emit('screen_share_started', {
+          roomId,
+          projectId,
+          userId: currentUser.id
+        });
+  
+      } else {
+        // Stop screen sharing
+        console.log('🛑 [VIDEO] Stopping screen share, restoring camera...');
+        
+        // Stop screen stream tracks
+        if (screenStream.current) {
+          screenStream.current.getTracks().forEach(track => {
+            console.log('🛑 [VIDEO] Stopping screen track:', track.kind);
+            track.stop();
+          });
+          screenStream.current = null;
+        }
+  
+        // Restore camera video track to peer connections
+        if (localStream && localStream.getVideoTracks().length > 0) {
+          const cameraVideoTrack = localStream.getVideoTracks()[0];
+          console.log('📹 [VIDEO] Restoring camera track, enabled:', cameraVideoTrack.enabled);
+          
+          // Ensure camera track is enabled (respect current video on/off state)
+          cameraVideoTrack.enabled = !isVideoOff;
+          
+          // Replace screen share track with camera track in all peer connections
+          peerConnections.current.forEach(pc => {
+            const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+            if (sender) {
+              console.log('🔄 [VIDEO] Replacing screen track with camera track');
+              sender.replaceTrack(cameraVideoTrack)
+                .then(() => console.log('✅ [VIDEO] Camera track restored successfully'))
+                .catch(err => console.error('❌ [VIDEO] Failed to restore camera:', err));
+            }
+          });
+  
+          // Ensure local video element shows the camera stream
+          if (localVideoRef.current && localVideoRef.current.srcObject !== localStream) {
+            console.log('🎥 [VIDEO] Re-attaching local stream to video element');
+            localVideoRef.current.srcObject = localStream;
+          }
+        } else {
+          console.error('❌ [VIDEO] No local camera stream available to restore!');
+        }
+  
+        setIsScreenSharing(false);
+        setScreenSharingUser(null);
+  
+        // Notify other participants
+        socket.emit('screen_share_stopped', {
+          roomId,
+          projectId,
+          userId: currentUser.id
+        });
+  
+        console.log('✅ [VIDEO] Screen share stopped, camera restored');
       }
-
-      setIsScreenSharing(false);
-      setScreenSharingUser(null);
-
-      // Notify other participants
-      socket.emit('screen_share_stopped', {
-        roomId,
-        projectId,
-        userId: currentUser.id
-      });
+    } catch (error) {
+      console.error('❌ [VIDEO] Screen share error:', error);
+      
+      // Reset states on error
+      if (isScreenSharing) {
+        setIsScreenSharing(false);
+        setScreenSharingUser(null);
+        
+        // Try to restore camera on error
+        if (localStream && localVideoRef.current) {
+          localVideoRef.current.srcObject = localStream;
+        }
+      }
     }
-  } catch (error) {
-    console.error('❌ [VIDEO] Screen share error:', error);
-  }
-}, [isScreenSharing, localStream, socket, roomId, projectId, currentUser.id]);
+  }, [isScreenSharing, localStream, isVideoOff, socket, roomId, projectId, currentUser.id]);
 
-
-socket.on('screen_share_started', (data) => {
-  setScreenSharingUser(data.userId);
-});
-
-socket.on('screen_share_stopped', (data) => {
-  if (screenSharingUser === data.userId) {
-    setScreenSharingUser(null);
-  }
-});
   // Toggle fullscreen
   const toggleFullScreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -459,6 +487,55 @@ socket.on('screen_share_stopped', (data) => {
       }
     };
   }, []); // Empty dependency array - only run once on mount
+  useEffect(() => {
+    if (!socket) return;
+  
+    socket.on('video_participant_joined', handleNewParticipant);
+    socket.on('video_offer', handleVideoOffer);
+    socket.on('video_answer', handleVideoAnswer);
+    socket.on('video_ice_candidate', handleIceCandidate);
+    socket.on('video_participant_left', (data) => handleRemoveParticipant(data.userId));
+    
+    // ✅ ADD THESE SCREEN SHARE LISTENERS HERE:
+    socket.on('screen_share_started', (data) => {
+      console.log('🖥️ [VIDEO] Remote user started sharing:', data.userId);
+      setScreenSharingUser(data.userId);
+    });
+  
+    socket.on('screen_share_stopped', (data) => {
+      console.log('🖥️ [VIDEO] Remote user stopped sharing:', data.userId);
+      if (screenSharingUser === data.userId) {
+        setScreenSharingUser(null);
+      }
+    });
+  
+    return () => {
+      socket.off('video_participant_joined', handleNewParticipant);
+      socket.off('video_offer', handleVideoOffer);
+      socket.off('video_answer', handleVideoAnswer);
+      socket.off('video_ice_candidate', handleIceCandidate);
+      socket.off('video_participant_left');
+      // ✅ ADD CLEANUP FOR SCREEN SHARE LISTENERS:
+      socket.off('screen_share_started');
+      socket.off('screen_share_stopped');
+    };
+  }, [socket, handleNewParticipant, handleVideoOffer, handleVideoAnswer, handleIceCandidate, handleRemoveParticipant, screenSharingUser]);
+
+  useEffect(() => {
+    if (localStream && localVideoRef.current) {
+      console.log('🎥 [VIDEO] LocalStream changed, ensuring video element connection');
+      if (localVideoRef.current.srcObject !== localStream) {
+        console.log('🔄 [VIDEO] Reconnecting local stream to video element');
+        localVideoRef.current.srcObject = localStream;
+      }
+      
+      // Log track states
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        console.log('📹 [VIDEO] Video track enabled:', videoTrack.enabled, 'readyState:', videoTrack.readyState);
+      }
+    }
+  }, [localStream, isScreenSharing]);
 
   // Update remote video elements
   useEffect(() => {
@@ -609,50 +686,64 @@ socket.on('screen_share_stopped', (data) => {
       {/* Camera Views - Small Row Below Screen Share */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-        gap: '12px',
-        maxHeight: '150px'
+        gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 150px))',
+        gap: '8px',
+        maxHeight: '120px',
+        padding: '8px 0'
       }}>
         {/* Local Camera (small) */}
         <div style={{
           position: 'relative',
           backgroundColor: 'rgba(26, 28, 32, 0.95)',
-          borderRadius: '12px',
+          borderRadius: '8px',
           overflow: 'hidden',
           aspectRatio: '16/9',
           border: screenSharingUser === 'local' ? 
-                 '2px solid rgba(59, 130, 246, 0.3)' : 
+                 '2px solid rgba(59, 130, 246, 0.5)' : 
                  '1px solid rgba(255, 255, 255, 0.1)'
         }}>
           <video
-            ref={screenSharingUser === 'local' ? null : localVideoRef}
+            ref={localVideoRef}
             autoPlay
             muted
             playsInline
-            srcObject={screenSharingUser === 'local' ? localStream : null}
             style={{
               width: '100%',
               height: '100%',
               objectFit: 'cover',
-              transform: 'scaleX(-1)' // Mirror for camera
+              transform: 'scaleX(-1)',
+              display: isVideoOff ? 'none' : 'block'
             }}
           />
+          {/* Show placeholder when video is off */}
+          {isVideoOff && (
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: 'rgba(26, 28, 32, 0.95)'
+            }}>
+              <VideoOff size={24} color="#ef4444" />
+            </div>
+          )}
           <div style={{
             position: 'absolute',
-            bottom: '8px',
-            left: '8px',
-            padding: '4px 8px',
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            bottom: '4px',
+            left: '4px',
+            padding: '3px 6px',
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
             borderRadius: '4px',
-            fontSize: '12px',
+            fontSize: '10px',
             color: 'white',
             display: 'flex',
             alignItems: 'center',
-            gap: '6px'
+            gap: '4px'
           }}>
             <span>{currentUser.username}</span>
-            {isMuted && <MicOff size={12} color="#ef4444" />}
-            {isVideoOff && <VideoOff size={12} color="#ef4444" />}
+            {isMuted && <MicOff size={10} color="#ef4444" />}
+            {screenSharingUser === 'local' && <Monitor size={10} color="#10b981" />}
           </div>
         </div>
 
@@ -665,7 +756,7 @@ socket.on('screen_share_stopped', (data) => {
             style={{
               position: 'relative',
               backgroundColor: 'rgba(26, 28, 32, 0.95)',
-              borderRadius: '12px',
+              borderRadius: '8px',
               overflow: 'hidden',
               aspectRatio: '16/9',
               border: '1px solid rgba(255, 255, 255, 0.1)'
@@ -683,12 +774,12 @@ socket.on('screen_share_stopped', (data) => {
             />
             <div style={{
               position: 'absolute',
-              bottom: '8px',
-              left: '8px',
-              padding: '4px 8px',
-              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              bottom: '4px',
+              left: '4px',
+              padding: '3px 6px',
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
               borderRadius: '4px',
-              fontSize: '12px',
+              fontSize: '10px',
               color: 'white'
             }}>
               {data.username}
@@ -871,6 +962,14 @@ socket.on('screen_share_stopped', (data) => {
   >
     {isScreenSharing ? <MonitorOff size={28} /> : <Monitor size={28} />}
   </button>
+
+  <VideoCallChat
+    socket={socket}
+    roomId={roomId}
+    projectId={projectId}
+    currentUser={currentUser}
+    participants={participants}
+  />
 
   <button
     onClick={toggleFullScreen}
