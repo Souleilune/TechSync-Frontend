@@ -274,28 +274,47 @@ const VideoCall = ({
     if (!pc) return;
 
     try {
-      // ✅ FIX: Handle offer collision with "polite peer" pattern
+      // ✅ PERFECT NEGOTIATION: Handle all signaling states properly
       const signalingState = pc.signalingState;
       console.log(`📡 [VIDEO] Current signaling state: ${signalingState}`);
       
-      // If we're already negotiating, decide who backs off
-      // Lower userId wins (becomes "polite"), higher userId backs off
+      // Determine politeness based on user IDs (lower ID = polite)
       const isPolite = currentUser.id < userId;
       
-      if (signalingState !== 'stable') {
+      // Check for collision
+      const offerCollision = signalingState !== 'stable' && signalingState !== 'have-remote-offer';
+      
+      if (offerCollision) {
         console.warn(`⚠️ [VIDEO] Offer collision detected! State: ${signalingState}`);
+        console.log(`🤝 [VIDEO] We are ${isPolite ? 'polite' : 'impolite'}`);
         
         if (!isPolite) {
-          console.log(`🤝 [VIDEO] We're impolite, ignoring incoming offer`);
-          return; // Ignore incoming offer, let our offer win
+          // Impolite: Ignore the collision, but DON'T ignore the offer completely
+          // Just log and continue - we'll handle it after our negotiation completes
+          console.log(`🤝 [VIDEO] Impolite: Continuing with incoming offer anyway`);
+          // Don't return - process the offer
+        } else {
+          console.log(`🤝 [VIDEO] Polite: Accepting incoming offer (rolling back)`);
         }
-        
-        console.log(`🤝 [VIDEO] We're polite, rolling back and accepting incoming offer`);
-        // Rollback: Don't create new offer, accept incoming one
       }
       
+      // Always process the offer (both polite and impolite)
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       console.log(`✅ [VIDEO] Set remote description from offer`);
+      
+      // ✅ Process any pending ICE candidates now that remote description is set
+      const pending = pendingCandidates.current.get(userId);
+      if (pending && pending.length > 0) {
+        console.log(`🧊 [VIDEO] Processing ${pending.length} pending ICE candidates for ${username}`);
+        for (const candidate of pending) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (err) {
+            console.error(`❌ [VIDEO] Failed to add pending candidate:`, err);
+          }
+        }
+        pendingCandidates.current.delete(userId);
+      }
       
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
@@ -353,8 +372,18 @@ const VideoCall = ({
     
     const pc = peerConnections.current.get(userId);
     if (!pc) {
-      // ✅ FIX #5: Store candidate for later if PC not ready yet
+      // ✅ Store candidate for later if PC not ready yet
       console.warn(`⚠️ [VIDEO] No PC yet for user ${userId}, storing ICE candidate`);
+      if (!pendingCandidates.current.has(userId)) {
+        pendingCandidates.current.set(userId, []);
+      }
+      pendingCandidates.current.get(userId).push(candidate);
+      return;
+    }
+
+    // ✅ Check if remote description is set
+    if (!pc.remoteDescription) {
+      console.warn(`⚠️ [VIDEO] No remote description yet for user ${userId}, storing ICE candidate`);
       if (!pendingCandidates.current.has(userId)) {
         pendingCandidates.current.set(userId, []);
       }
@@ -366,7 +395,8 @@ const VideoCall = ({
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
       console.log(`🧊 [VIDEO] Added ICE candidate from user ${userId}`);
     } catch (error) {
-      console.error(`❌ [VIDEO] Failed to add ICE candidate:`, error);
+      console.error(`❌ [VIDEO] Failed to add ICE candidate from ${userId}:`, error);
+      console.error(`❌ [VIDEO] PC state: signaling=${pc.signalingState}, ice=${pc.iceConnectionState}`);
     }
   }, []);
 
