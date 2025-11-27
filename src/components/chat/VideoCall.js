@@ -274,9 +274,32 @@ const VideoCall = ({
     if (!pc) return;
 
     try {
+      // ✅ FIX: Handle offer collision with "polite peer" pattern
+      const signalingState = pc.signalingState;
+      console.log(`📡 [VIDEO] Current signaling state: ${signalingState}`);
+      
+      // If we're already negotiating, decide who backs off
+      // Lower userId wins (becomes "polite"), higher userId backs off
+      const isPolite = currentUser.id < userId;
+      
+      if (signalingState !== 'stable') {
+        console.warn(`⚠️ [VIDEO] Offer collision detected! State: ${signalingState}`);
+        
+        if (!isPolite) {
+          console.log(`🤝 [VIDEO] We're impolite, ignoring incoming offer`);
+          return; // Ignore incoming offer, let our offer win
+        }
+        
+        console.log(`🤝 [VIDEO] We're polite, rolling back and accepting incoming offer`);
+        // Rollback: Don't create new offer, accept incoming one
+      }
+      
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      console.log(`✅ [VIDEO] Set remote description from offer`);
+      
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
+      console.log(`✅ [VIDEO] Created and set answer`);
 
       socket.emit('video_answer', {
         roomId,
@@ -291,7 +314,7 @@ const VideoCall = ({
     } catch (error) {
       console.error(`❌ [VIDEO] Failed to handle offer from ${username}:`, error);
     }
-  }, [getOrCreatePeerConnection, socket, roomId, projectId]);
+  }, [getOrCreatePeerConnection, socket, roomId, projectId, currentUser.id]);
 
   const handleVideoAnswer = useCallback(async (data) => {
     const { userId, answer } = data;
@@ -305,10 +328,23 @@ const VideoCall = ({
     }
 
     try {
+      // ✅ FIX: Check signaling state before setting remote description
+      console.log(`📡 [VIDEO] Current signaling state: ${pc.signalingState}`);
+      
+      if (pc.signalingState === 'stable') {
+        console.warn(`⚠️ [VIDEO] PC already in stable state, ignoring answer`);
+        return;
+      }
+      
+      if (pc.signalingState !== 'have-local-offer') {
+        console.warn(`⚠️ [VIDEO] PC in unexpected state ${pc.signalingState}, attempting anyway`);
+      }
+      
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
       console.log(`✅ [VIDEO] Set remote description from answer`);
     } catch (error) {
       console.error(`❌ [VIDEO] Failed to handle answer:`, error);
+      console.error(`❌ [VIDEO] Signaling state was: ${pc.signalingState}`);
     }
   }, []);
 
