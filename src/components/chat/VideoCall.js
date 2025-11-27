@@ -48,13 +48,16 @@ const VideoCall = ({
   const containerRef = useRef(null);
   const pendingCandidates = useRef(new Map()); // ✅ FIX #5: Store candidates until PC ready
 
-  // ICE servers configuration
+  // ICE servers configuration with multiple STUN servers
   const iceServers = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' }
-    ]
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' }
+    ],
+    iceCandidatePoolSize: 10
   };
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
@@ -149,12 +152,20 @@ const VideoCall = ({
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
+          console.log(`🧊 [VIDEO] Sending ICE candidate to ${username}:`, {
+            type: event.candidate.type,
+            protocol: event.candidate.protocol,
+            address: event.candidate.address,
+            port: event.candidate.port
+          });
           socket.emit('video_ice_candidate', {
             roomId,
             projectId,
             targetUserId: userId,
             candidate: event.candidate
           });
+        } else {
+          console.log(`✅ [VIDEO] All ICE candidates sent to ${username}`);
         }
       };
 
@@ -198,12 +209,36 @@ const VideoCall = ({
 
       pc.oniceconnectionstatechange = () => {
         console.log(`🧊 [VIDEO] ICE state with ${username}: ${pc.iceConnectionState}`);
+        
+        // Handle ICE connection failures
+        if (pc.iceConnectionState === 'failed') {
+          console.error(`❌ [VIDEO] ICE connection failed with ${username}, attempting restart`);
+          // Attempt ICE restart
+          pc.restartIce();
+        }
       };
 
       pc.onconnectionstatechange = () => {
         console.log(`🔌 [VIDEO] Connection state with ${username}: ${pc.connectionState}`);
-        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-          handleRemoveParticipant(userId);
+        
+        if (pc.connectionState === 'connected') {
+          console.log(`✅ [VIDEO] Successfully connected to ${username}!`);
+        } else if (pc.connectionState === 'failed') {
+          console.error(`❌ [VIDEO] Connection failed with ${username}`);
+          // Don't remove immediately, allow ICE restart to attempt recovery
+          setTimeout(() => {
+            if (pc.connectionState === 'failed') {
+              handleRemoveParticipant(userId);
+            }
+          }, 5000);
+        } else if (pc.connectionState === 'disconnected') {
+          console.warn(`⚠️ [VIDEO] Connection disconnected with ${username}`);
+          // Wait a bit before removing (might reconnect)
+          setTimeout(() => {
+            if (pc.connectionState === 'disconnected') {
+              handleRemoveParticipant(userId);
+            }
+          }, 5000);
         }
       };
 
@@ -361,6 +396,20 @@ const VideoCall = ({
       
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
       console.log(`✅ [VIDEO] Set remote description from answer`);
+      
+      // ✅ Process any pending ICE candidates now that remote description is set
+      const pending = pendingCandidates.current.get(userId);
+      if (pending && pending.length > 0) {
+        console.log(`🧊 [VIDEO] Processing ${pending.length} pending ICE candidates`);
+        for (const candidate of pending) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (err) {
+            console.error(`❌ [VIDEO] Failed to add pending candidate:`, err);
+          }
+        }
+        pendingCandidates.current.delete(userId);
+      }
     } catch (error) {
       console.error(`❌ [VIDEO] Failed to handle answer:`, error);
       console.error(`❌ [VIDEO] Signaling state was: ${pc.signalingState}`);
@@ -393,10 +442,15 @@ const VideoCall = ({
 
     try {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      console.log(`🧊 [VIDEO] Added ICE candidate from user ${userId}`);
+      console.log(`🧊 [VIDEO] Added ICE candidate from user ${userId}:`, {
+        type: candidate.type,
+        protocol: candidate.protocol,
+        address: candidate.address
+      });
     } catch (error) {
       console.error(`❌ [VIDEO] Failed to add ICE candidate from ${userId}:`, error);
       console.error(`❌ [VIDEO] PC state: signaling=${pc.signalingState}, ice=${pc.iceConnectionState}`);
+      console.error(`❌ [VIDEO] Candidate:`, candidate);
     }
   }, []);
 
