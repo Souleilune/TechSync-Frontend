@@ -223,8 +223,35 @@ const VideoCall = ({
         
         if (pc.connectionState === 'connected') {
           console.log(`✅ [VIDEO] Successfully connected to ${username}!`);
+          console.log(`✅ [VIDEO] ICE state: ${pc.iceConnectionState}`);
+          console.log(`✅ [VIDEO] Signaling state: ${pc.signalingState}`);
+          
+          // Check if we're receiving media
+          const receivers = pc.getReceivers();
+          console.log(`✅ [VIDEO] Active receivers: ${receivers.length}`);
+          receivers.forEach(receiver => {
+            if (receiver.track) {
+              console.log(`✅ [VIDEO] Receiver track: ${receiver.track.kind}, enabled: ${receiver.track.enabled}, readyState: ${receiver.track.readyState}`);
+            }
+          });
         } else if (pc.connectionState === 'failed') {
           console.error(`❌ [VIDEO] Connection failed with ${username}`);
+          console.error(`❌ [VIDEO] ICE state: ${pc.iceConnectionState}`);
+          console.error(`❌ [VIDEO] Signaling state: ${pc.signalingState}`);
+          
+          // Log what went wrong
+          const stats = pc.getStats();
+          stats.then(report => {
+            report.forEach(stat => {
+              if (stat.type === 'transport' && stat.dtlsState) {
+                console.error(`❌ [VIDEO] DTLS state: ${stat.dtlsState}`);
+              }
+              if (stat.type === 'candidate-pair' && stat.state === 'failed') {
+                console.error(`❌ [VIDEO] Failed candidate pair:`, stat);
+              }
+            });
+          });
+          
           // Don't remove immediately, allow ICE restart to attempt recovery
           setTimeout(() => {
             if (pc.connectionState === 'failed') {
@@ -323,13 +350,19 @@ const VideoCall = ({
         console.warn(`⚠️ [VIDEO] Offer collision detected! State: ${signalingState}`);
         console.log(`🤝 [VIDEO] We are ${isPolite ? 'polite' : 'impolite'}`);
         
-        if (!isPolite) {
-          // Impolite: Ignore the collision, but DON'T ignore the offer completely
-          // Just log and continue - we'll handle it after our negotiation completes
-          console.log(`🤝 [VIDEO] Impolite: Continuing with incoming offer anyway`);
-          // Don't return - process the offer
+        if (isPolite) {
+          // Polite: Must rollback our pending offer before accepting incoming offer
+          console.log(`🤝 [VIDEO] Polite: Rolling back local offer`);
+          try {
+            await pc.setLocalDescription({type: 'rollback'});
+            console.log(`✅ [VIDEO] Successfully rolled back local offer`);
+          } catch (rollbackError) {
+            console.error(`❌ [VIDEO] Rollback failed:`, rollbackError);
+            // Continue anyway, might still work
+          }
         } else {
-          console.log(`🤝 [VIDEO] Polite: Accepting incoming offer (rolling back)`);
+          // Impolite: Continue with incoming offer
+          console.log(`🤝 [VIDEO] Impolite: Continuing with incoming offer anyway`);
         }
       }
       
@@ -442,11 +475,7 @@ const VideoCall = ({
 
     try {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      console.log(`🧊 [VIDEO] Added ICE candidate from user ${userId}:`, {
-        type: candidate.type,
-        protocol: candidate.protocol,
-        address: candidate.address
-      });
+      console.log(`🧊 [VIDEO] Added ICE candidate from user ${userId}:`, candidate);
     } catch (error) {
       console.error(`❌ [VIDEO] Failed to add ICE candidate from ${userId}:`, error);
       console.error(`❌ [VIDEO] PC state: signaling=${pc.signalingState}, ice=${pc.iceConnectionState}`);
