@@ -636,7 +636,7 @@ const VideoCall = ({
         peerConnections.current.forEach((pc, odspUserId) => {
           try {
             const sender = pc.addTrack(screenVideoTrack, stream);
-            screenSenders.current.set; visually(odspUserId, sender);
+            screenSenders.current.set(odspUserId, sender);
             console.log(`✅ [VIDEO] Added screen track to peer ${odspUserId}`);
           } catch (err) {
             console.error(`❌ [VIDEO] Failed to add screen track to ${odspUserId}:`, err);
