@@ -1,11 +1,10 @@
 // frontend/src/components/chat/VideoCall.js
-// ✅ PRODUCTION-READY VERSION - All Critical Issues Fixed
-// Fixes:
-// 1. No stream.id modification (read-only)
-// 2. No duplicate peer connections
-// 3. Handles missing event.streams gracefully
-// 4. Uses replaceTrack for screen share (not add/remove)
-// 5. Guards against race conditions
+// ✅ PRODUCTION-READY VERSION - Screen Share Track Replacement Fix
+// Critical Fixes:
+// 1. Properly updates local video element srcObject during screen share
+// 2. Restores camera track correctly when stopping screen share
+// 3. Ensures video tracks are not stopped accidentally
+// 4. Maintains track enabled state through screen share transitions
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import VideoCallChat from './VideoCallChat';
@@ -46,10 +45,9 @@ const VideoCall = ({
   const peerConnections = useRef(new Map());
   const screenStream = useRef(null);
   const containerRef = useRef(null);
-  const pendingCandidates = useRef(new Map()); // ✅ FIX #5: Store candidates until PC ready
+  const pendingCandidates = useRef(new Map());
 
   // ICE servers configuration with STUN + TURN servers
-  // TURN servers relay traffic when direct peer-to-peer fails (DTLS issues)
   const iceServers = {
     iceServers: [
       // STUN servers for NAT traversal
@@ -59,7 +57,7 @@ const VideoCall = ({
       { urls: 'stun:stun3.l.google.com:19302' },
       { urls: 'stun:stun4.l.google.com:19302' },
       
-      // ✅ TURN servers for relay (fixes DTLS failures)
+      // TURN servers for relay (fixes DTLS failures)
       {
         urls: 'turn:openrelay.metered.ca:80',
         username: 'openrelayproject',
@@ -143,16 +141,13 @@ const VideoCall = ({
     }
   }, [socket, roomId, projectId, currentUser]);
 
-  // ✅ FIX #2: Check for existing peer connection before creating
   const getOrCreatePeerConnection = useCallback((userId, username) => {
-    // Check if peer connection already exists
     let pc = peerConnections.current.get(userId);
     if (pc) {
       console.log(`♻️ [VIDEO] Reusing existing peer connection for ${username}`);
       return pc;
     }
 
-    // ✅ FIX #5: Ensure localStream is available
     if (!localStream) {
       console.error('❌ [VIDEO] Cannot create peer connection - no local stream');
       return null;
@@ -163,10 +158,9 @@ const VideoCall = ({
       
       pc = new RTCPeerConnection(iceServers);
       
-      // ✅ PERFECT NEGOTIATION: Add per-peer state flags
-      pc.makingOffer = false;  // Track if we're currently making an offer
-      pc.polite = currentUser.id < userId;  // Compute and store politeness once
-      pc.lastRemoteSdpId = null;  // Track last applied SDP to avoid duplicates
+      pc.makingOffer = false;
+      pc.polite = currentUser.id < userId;
+      pc.lastRemoteSdpId = null;
       
       console.log(`🤝 [VIDEO] Peer ${username} - We are ${pc.polite ? 'polite' : 'impolite'}`);
 
@@ -178,14 +172,12 @@ const VideoCall = ({
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          // ✅ Log proper ICE candidate fields (candidate string, sdpMid, sdpMLineIndex)
           console.log(`🧊 [VIDEO] Sending ICE candidate to ${username}:`, {
             candidate: event.candidate.candidate,
             sdpMid: event.candidate.sdpMid,
             sdpMLineIndex: event.candidate.sdpMLineIndex
           });
           
-          // ✅ Send complete candidate structure
           socket.emit('video_ice_candidate', {
             roomId,
             projectId,
@@ -202,16 +194,13 @@ const VideoCall = ({
         }
       };
 
-      // ✅ FIX #3: Handle missing event.streams gracefully
       pc.ontrack = (event) => {
         console.log(`📹 [VIDEO] Received track from ${username}: ${event.track.kind}`);
         
-        // Get stream - handle case where event.streams might be empty
         let stream;
         if (event.streams && event.streams.length > 0) {
           stream = event.streams[0];
         } else {
-          // Create a new MediaStream if none provided
           console.warn(`⚠️ [VIDEO] No streams in ontrack event, creating new stream`);
           stream = new MediaStream([event.track]);
         }
@@ -221,14 +210,12 @@ const VideoCall = ({
           const existingData = newMap.get(userId);
           
           if (existingData?.stream) {
-            // Add track to existing stream if not already there
             const trackExists = existingData.stream.getTracks().some(t => t.id === event.track.id);
             if (!trackExists) {
               existingData.stream.addTrack(event.track);
               console.log(`✅ [VIDEO] Added ${event.track.kind} track to existing stream for ${username}`);
             }
           } else {
-            // Create new entry
             newMap.set(userId, {
               stream: stream,
               username: username
@@ -243,10 +230,8 @@ const VideoCall = ({
       pc.oniceconnectionstatechange = () => {
         console.log(`🧊 [VIDEO] ICE state with ${username}: ${pc.iceConnectionState}`);
         
-        // Handle ICE connection failures
         if (pc.iceConnectionState === 'failed') {
           console.error(`❌ [VIDEO] ICE connection failed with ${username}, attempting restart`);
-          // Attempt ICE restart
           pc.restartIce();
         }
       };
@@ -259,7 +244,6 @@ const VideoCall = ({
           console.log(`✅ [VIDEO] ICE state: ${pc.iceConnectionState}`);
           console.log(`✅ [VIDEO] Signaling state: ${pc.signalingState}`);
           
-          // Check if we're receiving media
           const receivers = pc.getReceivers();
           console.log(`✅ [VIDEO] Active receivers: ${receivers.length}`);
           receivers.forEach(receiver => {
@@ -272,7 +256,6 @@ const VideoCall = ({
           console.error(`❌ [VIDEO] ICE state: ${pc.iceConnectionState}`);
           console.error(`❌ [VIDEO] Signaling state: ${pc.signalingState}`);
           
-          // Log what went wrong
           const stats = pc.getStats();
           stats.then(report => {
             report.forEach(stat => {
@@ -285,7 +268,6 @@ const VideoCall = ({
             });
           });
           
-          // Don't remove immediately, allow ICE restart to attempt recovery
           setTimeout(() => {
             if (pc.connectionState === 'failed') {
               handleRemoveParticipant(userId);
@@ -293,7 +275,6 @@ const VideoCall = ({
           }, 5000);
         } else if (pc.connectionState === 'disconnected') {
           console.warn(`⚠️ [VIDEO] Connection disconnected with ${username}`);
-          // Wait a bit before removing (might reconnect)
           setTimeout(() => {
             if (pc.connectionState === 'disconnected') {
               handleRemoveParticipant(userId);
@@ -304,7 +285,6 @@ const VideoCall = ({
 
       peerConnections.current.set(userId, pc);
       
-      // ✅ FIX #5: Process any pending ICE candidates
       const pending = pendingCandidates.current.get(userId);
       if (pending && pending.length > 0) {
         console.log(`🧊 [VIDEO] Processing ${pending.length} pending ICE candidates for ${username}`);
@@ -327,7 +307,7 @@ const VideoCall = ({
       console.error(`❌ [VIDEO] Failed to create peer connection for ${username}:`, error);
       return null;
     }
-  }, [localStream, socket, roomId, projectId]);
+  }, [localStream, socket, roomId, projectId, currentUser.id]);
 
   const handleNewParticipant = useCallback(async (data) => {
     const { userId, username } = data;
@@ -350,13 +330,11 @@ const VideoCall = ({
     if (!pc) return;
 
     try {
-      // ✅ PERFECT NEGOTIATION: Set makingOffer flag
       pc.makingOffer = true;
       
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       
-      // Generate unique SDP ID to track duplicates
       const sdpId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       socket.emit('video_offer', {
@@ -364,14 +342,13 @@ const VideoCall = ({
         projectId,
         targetUserId: userId,
         offer: pc.localDescription,
-        sdpId  // ✅ Include sdpId for duplicate detection
+        sdpId
       });
       
       console.log(`✅ [VIDEO] Sent offer to ${username} (sdpId: ${sdpId})`);
     } catch (error) {
       console.error(`❌ [VIDEO] Failed to create offer for ${username}:`, error);
     } finally {
-      // ✅ Always clear makingOffer flag
       pc.makingOffer = false;
     }
   }, [currentUser.id, getOrCreatePeerConnection, socket, roomId, projectId]);
@@ -385,16 +362,12 @@ const VideoCall = ({
     if (!pc) return;
 
     try {
-      // ✅ PERFECT NEGOTIATION: Check for duplicate SDP
       if (sdpId && pc.lastRemoteSdpId === sdpId) {
         console.warn(`⚠️ [VIDEO] Ignoring duplicate offer from ${username} (sdpId: ${sdpId})`);
         return;
       }
       
-      // ✅ PERFECT NEGOTIATION: Use stored politeness flag
       const isPolite = pc.polite;
-      
-      // ✅ PERFECT NEGOTIATION: Check for offer collision using makingOffer
       const offerCollision = (pc.signalingState !== 'stable' || pc.makingOffer);
       
       console.log(`📡 [VIDEO] Signaling state: ${pc.signalingState}, makingOffer: ${pc.makingOffer}`);
@@ -404,32 +377,26 @@ const VideoCall = ({
         console.log(`🤝 [VIDEO] We are ${isPolite ? 'polite' : 'impolite'}`);
         
         if (!isPolite) {
-          // Impolite: Ignore incoming offer during collision
           console.log(`🤝 [VIDEO] Impolite: Ignoring incoming offer`);
           return;
         }
         
-        // Polite: Rollback and accept incoming offer
         console.log(`🤝 [VIDEO] Polite: Rolling back local offer`);
         try {
           await pc.setLocalDescription({type: 'rollback'});
           console.log(`✅ [VIDEO] Successfully rolled back local offer`);
         } catch (rollbackError) {
           console.error(`❌ [VIDEO] Rollback failed:`, rollbackError);
-          // Continue anyway
         }
       }
       
-      // Set remote description
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       console.log(`✅ [VIDEO] Set remote description from offer`);
       
-      // ✅ Track this SDP ID to avoid duplicates
       if (sdpId) {
         pc.lastRemoteSdpId = sdpId;
       }
       
-      // ✅ Process any pending ICE candidates now that remote description is set
       const pending = pendingCandidates.current.get(userId);
       if (pending && pending.length > 0) {
         console.log(`🧊 [VIDEO] Processing ${pending.length} pending ICE candidates for ${username}`);
@@ -449,12 +416,10 @@ const VideoCall = ({
         pendingCandidates.current.delete(userId);
       }
       
-      // Create and send answer
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       console.log(`✅ [VIDEO] Created and set answer`);
       
-      // Generate unique SDP ID for answer
       const answerSdpId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       socket.emit('video_answer', {
@@ -462,7 +427,7 @@ const VideoCall = ({
         projectId,
         targetUserId: userId,
         answer: pc.localDescription,
-        sdpId: answerSdpId  // ✅ Include sdpId
+        sdpId: answerSdpId
       });
       
       console.log(`✅ [VIDEO] Sent answer to ${username} (sdpId: ${answerSdpId})`);
@@ -485,7 +450,6 @@ const VideoCall = ({
     }
 
     try {
-      // ✅ PERFECT NEGOTIATION: Check for duplicate SDP
       if (sdpId && pc.lastRemoteSdpId === sdpId) {
         console.warn(`⚠️ [VIDEO] Ignoring duplicate answer (sdpId: ${sdpId})`);
         return;
@@ -505,12 +469,10 @@ const VideoCall = ({
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
       console.log(`✅ [VIDEO] Set remote description from answer`);
       
-      // ✅ Track this SDP ID to avoid duplicates
       if (sdpId) {
         pc.lastRemoteSdpId = sdpId;
       }
       
-      // ✅ Process any pending ICE candidates now that remote description is set
       const pending = pendingCandidates.current.get(userId);
       if (pending && pending.length > 0) {
         console.log(`🧊 [VIDEO] Processing ${pending.length} pending ICE candidates`);
@@ -540,7 +502,6 @@ const VideoCall = ({
     
     const pc = peerConnections.current.get(userId);
     if (!pc) {
-      // ✅ Store candidate for later if PC not ready yet
       console.warn(`⚠️ [VIDEO] No PC yet for user ${userId}, storing ICE candidate`);
       if (!pendingCandidates.current.has(userId)) {
         pendingCandidates.current.set(userId, []);
@@ -549,7 +510,6 @@ const VideoCall = ({
       return;
     }
 
-    // ✅ Check if remote description is set
     if (!pc.remoteDescription) {
       console.warn(`⚠️ [VIDEO] No remote description yet for user ${userId}, storing ICE candidate`);
       if (!pendingCandidates.current.has(userId)) {
@@ -560,7 +520,6 @@ const VideoCall = ({
     }
 
     try {
-      // ✅ PERFECT NEGOTIATION: Properly construct RTCIceCandidate with explicit fields
       const iceCandidate = new RTCIceCandidate({
         candidate: candidate.candidate,
         sdpMid: candidate.sdpMid,
@@ -645,7 +604,7 @@ const VideoCall = ({
     }
   }, [localStream, socket, roomId, projectId, currentUser.id]);
 
-  // ✅ FIX #4: Use replaceTrack instead of add/remove
+  // ✅ CRITICAL FIX: Screen share with proper local video srcObject management
   const toggleScreenShare = useCallback(async () => {
     try {
       if (!isScreenSharing) {
@@ -658,22 +617,40 @@ const VideoCall = ({
 
         screenStream.current = stream;
         const screenVideoTrack = stream.getVideoTracks()[0];
+        
+        // ✅ CRITICAL FIX #1: Update local video element to show screen share
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+          console.log('✅ [VIDEO] Updated local video element to show screen share');
+        }
 
-        // ✅ FIX #4: Use replaceTrack on each peer's video sender
+        // ✅ Replace outgoing video track for all peer connections
+        let successCount = 0;
         peerConnections.current.forEach((pc, userId) => {
           try {
             const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-            if (sender) {
-              sender.replaceTrack(screenVideoTrack);
-              console.log(`✅ [VIDEO] Replaced camera with screen for user ${userId}`);
+            if (sender && sender.track) {
+              sender.replaceTrack(screenVideoTrack)
+                .then(() => {
+                  successCount++;
+                  console.log(`✅ [VIDEO] Replaced camera with screen for user ${userId}`);
+                })
+                .catch(err => {
+                  console.error(`❌ [VIDEO] Failed to replace track for ${userId}:`, err);
+                });
+            } else {
+              console.warn(`⚠️ [VIDEO] No video sender found for user ${userId}`);
             }
           } catch (error) {
-            console.error(`❌ [VIDEO] Failed to replace track for ${userId}:`, error);
+            console.error(`❌ [VIDEO] Error replacing track for ${userId}:`, error);
           }
         });
 
+        console.log(`📊 [VIDEO] Screen share track replacement: ${successCount} peers`);
+
         // Handle when user stops sharing via browser button
         screenVideoTrack.onended = () => {
+          console.log('🖥️ [VIDEO] Screen share ended by user (browser button)');
           toggleScreenShare();
         };
 
@@ -689,31 +666,72 @@ const VideoCall = ({
       } else {
         console.log('🛑 [VIDEO] Stopping screen share...');
         
+        // ✅ Stop screen share tracks
         if (screenStream.current) {
-          screenStream.current.getTracks().forEach(track => track.stop());
+          screenStream.current.getTracks().forEach(track => {
+            track.stop();
+            console.log('🛑 [VIDEO] Stopped screen share track');
+          });
           screenStream.current = null;
         }
 
-        // ✅ FIX #4: Use replaceTrack to restore camera
+        // ✅ CRITICAL FIX #2: Get camera track from localStream (don't create new one)
         if (localStream) {
           const cameraVideoTrack = localStream.getVideoTracks()[0];
-          cameraVideoTrack.enabled = !isVideoOff;
+          
+          if (!cameraVideoTrack) {
+            console.error('❌ [VIDEO] No camera track found in localStream!');
+            return;
+          }
 
+          // ✅ Verify track is still live
+          if (cameraVideoTrack.readyState === 'ended') {
+            console.error('❌ [VIDEO] Camera track has ended! Cannot restore.');
+            return;
+          }
+
+          // ✅ Ensure camera track has correct enabled state
+          cameraVideoTrack.enabled = !isVideoOff;
+          console.log(`🎥 [VIDEO] Camera track state: enabled=${cameraVideoTrack.enabled}, readyState=${cameraVideoTrack.readyState}`);
+
+          // ✅ CRITICAL FIX #3: Restore local video element to show camera
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = localStream;
+            console.log('✅ [VIDEO] Restored local video element to camera stream');
+          }
+
+          // ✅ Replace outgoing video track back to camera for all peer connections
+          let successCount = 0;
+          let failCount = 0;
+          
+          const replacePromises = [];
           peerConnections.current.forEach((pc, userId) => {
             try {
               const sender = pc.getSenders().find(s => s.track?.kind === 'video');
               if (sender) {
-                sender.replaceTrack(cameraVideoTrack);
-                console.log(`✅ [VIDEO] Restored camera for user ${userId}`);
+                console.log(`🔄 [VIDEO] Restoring camera for user ${userId}`);
+                const promise = sender.replaceTrack(cameraVideoTrack)
+                  .then(() => {
+                    successCount++;
+                    console.log(`✅ [VIDEO] Successfully restored camera for user ${userId}`);
+                  })
+                  .catch(err => {
+                    failCount++;
+                    console.error(`❌ [VIDEO] Failed to restore camera for user ${userId}:`, err);
+                  });
+                replacePromises.push(promise);
+              } else {
+                console.warn(`⚠️ [VIDEO] No video sender found for user ${userId}`);
               }
             } catch (error) {
-              console.error(`❌ [VIDEO] Failed to restore camera for ${userId}:`, error);
+              failCount++;
+              console.error(`❌ [VIDEO] Error restoring camera for ${userId}:`, error);
             }
           });
 
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = localStream;
-          }
+          // Wait for all replacements to complete
+          await Promise.allSettled(replacePromises);
+          console.log(`📊 [VIDEO] Camera restoration: ${successCount} succeeded, ${failCount} failed`);
         }
 
         setIsScreenSharing(false);
@@ -728,6 +746,7 @@ const VideoCall = ({
     } catch (error) {
       console.error('❌ [VIDEO] Screen share error:', error);
       
+      // ✅ Cleanup on error
       if (isScreenSharing) {
         setIsScreenSharing(false);
         setScreenSharingUser(null);
@@ -737,8 +756,23 @@ const VideoCall = ({
           screenStream.current = null;
         }
         
+        // ✅ Restore camera on error
         if (localStream && localVideoRef.current) {
-          localVideoRef.current.srcObject = localStream;
+          const cameraTrack = localStream.getVideoTracks()[0];
+          if (cameraTrack && cameraTrack.readyState !== 'ended') {
+            cameraTrack.enabled = !isVideoOff;
+            localVideoRef.current.srcObject = localStream;
+            
+            // Restore to peers
+            peerConnections.current.forEach((pc, userId) => {
+              const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+              if (sender) {
+                sender.replaceTrack(cameraTrack).catch(err => 
+                  console.error(`❌ [VIDEO] Error restoring camera on error for ${userId}:`, err)
+                );
+              }
+            });
+          }
         }
       }
     }
