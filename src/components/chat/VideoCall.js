@@ -45,10 +45,10 @@ const VideoCall = ({
   const remoteVideosRef = useRef({});
   const peerConnections = useRef(new Map());
   const screenStream = useRef(null);
+  // Track per-peer senders for screen sharing so we can remove them cleanly
+  const screenSenders = useRef(new Map());
   const containerRef = useRef(null);
   const pendingCandidates = useRef(new Map());
-  const screenStreamRef = useRef(null);
-  const screenSenderRef = useRef(null);
   
   // ✅ NEW: Track the original camera track separately
   const originalCameraTrack = useRef(null);
@@ -223,6 +223,29 @@ const VideoCall = ({
           
           return newMap;
         });
+      };
+
+      // When tracks are added/removed (e.g. we add a screen sender), negotiation may be needed
+      pc.onnegotiationneeded = async () => {
+        try {
+          pc.makingOffer = true;
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+
+          const sdpId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          socket.emit('video_offer', {
+            roomId,
+            projectId,
+            targetUserId: userId,
+            offer: pc.localDescription,
+            sdpId
+          });
+          console.log(`📝 [VIDEO] Negotiation needed - sent offer to ${username}`);
+        } catch (err) {
+          console.error('❌ [VIDEO] onnegotiationneeded failed:', err);
+        } finally {
+          pc.makingOffer = false;
+        }
       };
 
       pc.oniceconnectionstatechange = () => {
@@ -527,93 +550,126 @@ const VideoCall = ({
     console.log('📹 [VIDEO] Camera:', newEnabledState ? 'ON' : 'OFF');
     console.log('📹 [VIDEO] Screen sharing active:', isScreenSharing);
 
-    // ✅ CRITICAL: Only notify peers about camera state if NOT screen sharing
-    // During screen share, peers are receiving screen track, not camera
-    // But we still track the camera state for when screen share stops
-    if (!isScreenSharing) {
-      socket.emit('video_track_toggle', {
-        roomId,
-        projectId,
-        userId: currentUser.id,
-        trackKind: 'video',
-        enabled: newEnabledState
-      });
-    } else {
-      console.log('📹 [VIDEO] Camera toggle stored (will apply when screen share stops)');
-    }
+    // Notify peers about camera state change. We now keep camera active even during screen share,
+    // so peers should always be informed of the camera enabled/disabled state.
+    socket.emit('video_track_toggle', {
+      roomId,
+      projectId,
+      userId: currentUser.id,
+      trackKind: 'video',
+      enabled: newEnabledState
+    });
   }, [socket, roomId, projectId, currentUser.id, isScreenSharing]);
 
   // ✅ COMPLETE REWRITE: Screen share management
-  const toggleScreenShare = async () => {
-  try {
-    // ---------------------------------------------------
-    // CASE 1 — START SCREEN SHARING
-    // ---------------------------------------------------
-    if (!screenStreamRef.current) {
-      console.log("Starting screen share...");
+  const toggleScreenShare = useCallback(async () => {
+    try {
+      if (!isScreenSharing) {
+        console.log('🖥️ [VIDEO] Starting screen share...');
+        
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { cursor: 'always' },
+          audio: false
+        });
 
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { cursor: "always" },
-        audio: false, // keep audio separate
-      });
+        screenStream.current = stream;
+        const screenVideoTrack = stream.getVideoTracks()[0];
+        // Keep local camera in the small thumbnail and show screen in the large view.
+        // We add the screen track as an additional sender for each peer so that
+        // camera remains available to participants while screen is shown.
+        peerConnections.current.forEach((pc, userId) => {
+          try {
+            const sender = pc.addTrack(screenVideoTrack, stream);
+            screenSenders.current.set(userId, sender);
+            console.log(`✅ [VIDEO] Added screen sender for user ${userId}`);
+          } catch (err) {
+            console.error(`❌ [VIDEO] Failed to add screen sender to ${userId}:`, err);
+          }
+        });
 
-      screenStreamRef.current = screenStream;
+        // Handle when user stops sharing via browser button
+        screenVideoTrack.onended = () => {
+          console.log('🖥️ [VIDEO] Screen share ended by browser');
+          toggleScreenShare();
+        };
 
-      // Show screen preview in its OWN tile
-      if (localScreenVideoRef.current) {
-        localScreenVideoRef.current.srcObject = screenStream;
+        setIsScreenSharing(true);
+        setScreenSharingUser('local');
+
+        socket.emit('screen_share_started', {
+          roomId,
+          projectId,
+          userId: currentUser.id
+        });
+
+      } else {
+        console.log('🛑 [VIDEO] Stopping screen share...');
+        
+        // Stop screen tracks and remove the per-peer screen senders so peers stop
+        // receiving the screen track. Camera senders remain untouched so camera
+        // stays available as a separate video feed.
+        if (screenStream.current) {
+          screenStream.current.getTracks().forEach(track => track.stop());
+
+          peerConnections.current.forEach((pc, userId) => {
+            const sender = screenSenders.current.get(userId);
+            if (sender) {
+              try {
+                pc.removeTrack(sender);
+                console.log(`✅ [VIDEO] Removed screen sender for user ${userId}`);
+              } catch (err) {
+                console.error(`❌ [VIDEO] Failed to remove screen sender for ${userId}:`, err);
+              }
+            }
+          });
+
+          screenSenders.current.clear();
+          screenStream.current = null;
+        }
+
+        // Ensure local thumbnail shows camera again (localVideoRef already uses localStream)
+        if (localVideoRef.current && localStream && !isScreenSharing) {
+          localVideoRef.current.srcObject = localStream;
+        }
+
+        setIsScreenSharing(false);
+        setScreenSharingUser(null);
+
+        socket.emit('screen_share_stopped', {
+          roomId,
+          projectId,
+          userId: currentUser.id
+        });
       }
-
-      // Add screen track as a SECOND video track (Google Meet style)
-      const screenTrack = screenStream.getVideoTracks()[0];
-      screenSenderRef.current = pc.addTrack(screenTrack, screenStream);
-
-      // Remove automatically when user presses "Stop sharing" in browser UI
-      screenTrack.onended = () => {
-        console.log("Screen sharing ended by browser UI");
-        stopScreenShare();
-      };
-
-      return;
+    } catch (error) {
+      console.error('❌ [VIDEO] Screen share error:', error);
+      
+      // ✅ Cleanup on error
+      if (screenStream.current) {
+        screenStream.current.getTracks().forEach(track => track.stop());
+        screenStream.current = null;
+      }
+      
+      // ✅ Restore camera
+      if (originalCameraTrack.current && localStream) {
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = localStream;
+        }
+        
+        peerConnections.current.forEach((pc) => {
+          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+          if (sender) {
+            sender.replaceTrack(originalCameraTrack.current).catch(err => 
+              console.error(`❌ [VIDEO] Error restoring camera:`, err)
+            );
+          }
+        });
+      }
+      
+      setIsScreenSharing(false);
+      setScreenSharingUser(null);
     }
-
-    // ---------------------------------------------------
-    // CASE 2 — STOP SCREEN SHARING
-    // ---------------------------------------------------
-    stopScreenShare();
-
-  } catch (err) {
-    console.error("Screen share error:", err);
-  }
-};
-
-// -------------------------------------------------------
-// Helper: Cleanly stop screen sharing
-// -------------------------------------------------------
-
-const stopScreenShare = () => {
-  console.log("Stopping screen share...");
-
-  // Stop screen stream tracks
-  if (screenStreamRef.current) {
-    screenStreamRef.current.getTracks().forEach(track => track.stop());
-    screenStreamRef.current = null;
-  }
-
-  // Remove the sender from peer connection
-  if (screenSenderRef.current) {
-    pc.removeTrack(screenSenderRef.current);
-    screenSenderRef.current = null;
-  }
-
-  // Clear the local preview tile
-  if (localScreenVideoRef.current) {
-    localScreenVideoRef.current.srcObject = null;
-  }
-
-  console.log("Screen share stopped.");
-};
-
+  }, [isScreenSharing, localStream, isVideoOff, socket, roomId, projectId, currentUser.id]);
 
   const toggleFullScreen = useCallback(() => {
     if (!document.fullscreenElement) {
