@@ -149,6 +149,31 @@ const VideoCall = ({
     }
   }, [socket, roomId, projectId, currentUser]);
 
+  // Remove a participant and clean up all related resources
+  const handleRemoveParticipant = useCallback((userId) => {
+    console.log(`👋 [VIDEO] Participant left: ${userId}`);
+    
+    const pc = peerConnections.current.get(userId);
+    if (pc) {
+      pc.close();
+      peerConnections.current.delete(userId);
+    }
+
+    pendingCandidates.current.delete(userId);
+    screenSenders.current.delete(userId);
+
+    setRemoteStreams(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(userId);
+      return newMap;
+    });
+
+    setParticipants(prev => prev.filter(p => p.userId !== userId));
+    
+    // If this user was sharing, clear the screenSharingUser flag
+    setScreenSharingUser(prev => (prev === userId ? null : prev));
+  }, []);
+
   const getOrCreatePeerConnection = useCallback((userId, username) => {
     let pc = peerConnections.current.get(userId);
     if (pc) {
@@ -500,31 +525,6 @@ const VideoCall = ({
     }
   }, []);
 
-  const handleRemoveParticipant = useCallback((userId) => {
-    console.log(`👋 [VIDEO] Participant left: ${userId}`);
-    
-    const pc = peerConnections.current.get(userId);
-    if (pc) {
-      pc.close();
-      peerConnections.current.delete(userId);
-    }
-
-    pendingCandidates.current.delete(userId);
-    screenSenders.current.delete(userId);
-
-    setRemoteStreams(prev => {
-      const newMap = new Map(prev);
-      newMap.delete(userId);
-      return newMap;
-    });
-
-    setParticipants(prev => prev.filter(p => p.userId !== userId));
-    
-    if (screenSharingUser === userId) {
-      setScreenSharingUser(null);
-    }
-  }, [screenSharingUser]);
-
   const toggleMute = useCallback(() => {
     if (localStream) {
       const audioTrack = localStream.getAudioTracks()[0];
@@ -726,9 +726,7 @@ const VideoCall = ({
   
     socket.on('screen_share_stopped', (data) => {
       console.log('🖥️ [VIDEO] Remote user stopped sharing:', data.userId);
-      if (screenSharingUser === data.userId) {
-        setScreenSharingUser(null);
-      }
+      setScreenSharingUser(prev => (prev === data.userId ? null : prev));
     });
 
     socket.on('video_track_toggle', (data) => {
@@ -813,8 +811,6 @@ const VideoCall = ({
     handleVideoAnswer, 
     handleIceCandidate, 
     handleRemoveParticipant, 
-    screenSharingUser, 
-    getOrCreatePeerConnection, 
     roomId, 
     projectId, 
     currentUser.id
