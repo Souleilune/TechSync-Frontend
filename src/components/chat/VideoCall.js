@@ -1,5 +1,5 @@
-// frontend/src/components/chat/VideoCall.js
-// Production-ready VideoCall component
+// frontend/src/components/chat/VideoCall.js  
+// ✅ FIXED: Main component with proper stream handling
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useWebRTC } from '../../hooks/useWebRTC';
@@ -7,75 +7,7 @@ import VideoCallChat from './VideoCallChat';
 import VideoGrid from './VideoGrid';
 import VideoControls from './VideoControls';
 import ConnectionStatus from './ConnectionStatus';
-import { 
-  Video, 
-  VideoOff, 
-  Mic, 
-  MicOff, 
-  PhoneOff, 
-  Monitor, 
-  MonitorOff,
-  Maximize2,
-  Minimize2,
-  Settings,
-  Users
-} from 'lucide-react';
-
-// Styles
-const styles = {
-  container: {
-    position: 'fixed',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#0F1116',
-    zIndex: 9999,
-    display: 'flex',
-    flexDirection: 'column',
-    transition: 'left 0.3s ease'
-  },
-  header: {
-    padding: '16px 24px',
-    backgroundColor: 'rgba(26, 28, 32, 0.95)',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between'
-  },
-  headerLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px'
-  },
-  title: {
-    margin: 0,
-    fontSize: '18px',
-    fontWeight: '600',
-    color: 'white'
-  },
-  subtitle: {
-    margin: 0,
-    fontSize: '14px',
-    color: '#9ca3af'
-  },
-  mainContent: {
-    flex: 1,
-    padding: '16px',
-    overflowY: 'auto',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px'
-  },
-  controlBar: {
-    padding: '20px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '20px',
-    backgroundColor: 'rgba(26, 28, 32, 0.95)',
-    borderTop: '1px solid rgba(255, 255, 255, 0.1)'
-  }
-};
+import { Video, VideoOff } from 'lucide-react';
 
 const VideoCall = ({ 
   socket, 
@@ -85,25 +17,19 @@ const VideoCall = ({
   onEndCall,
   isInitiator = false 
 }) => {
-  // Local UI state
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [participants, setParticipants] = useState([]);
   const [callStatus, setCallStatus] = useState('connecting');
-  const [showSettings, setShowSettings] = useState(false);
 
-  // Refs
-  const localVideoRef = useRef(null);
   const containerRef = useRef(null);
 
-  // Sidebar state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem('projectSidebarCollapsed');
     return saved === 'true';
   });
 
-  // WebRTC hook
   const {
     localStream,
     screenStream,
@@ -121,16 +47,17 @@ const VideoCall = ({
     toggleVideo,
     startScreenShare,
     stopScreenShare,
+    handleRemoteScreenShareStarted,
+    handleRemoteScreenShareStopped,
     cleanupPeerConnection,
     cleanup
   } = useWebRTC({ socket, roomId, projectId, currentUser });
 
-  // Sidebar toggle listener
+  // Sidebar toggle
   useEffect(() => {
     const handleSidebarToggle = (event) => {
       setIsSidebarCollapsed(event.detail.collapsed);
     };
-
     window.addEventListener('projectSidebarToggle', handleSidebarToggle);
     return () => window.removeEventListener('projectSidebarToggle', handleSidebarToggle);
   }, []);
@@ -151,7 +78,7 @@ const VideoCall = ({
 
         setCallStatus('connected');
       } catch (err) {
-        console.error('❌ [VideoCall] Failed to start call:', err);
+        console.error('❌ [VideoCall] Failed to start:', err);
         setCallStatus('failed');
       }
     };
@@ -168,18 +95,7 @@ const VideoCall = ({
     };
   }, []);
 
-  // Update local video element
-  useEffect(() => {
-    if (localVideoRef.current) {
-      if (isScreenSharing && screenStream) {
-        localVideoRef.current.srcObject = screenStream;
-      } else if (localStream) {
-        localVideoRef.current.srcObject = localStream;
-      }
-    }
-  }, [localStream, screenStream, isScreenSharing]);
-
-  // Socket event handlers
+  // Socket events
   useEffect(() => {
     if (!socket) return;
 
@@ -194,7 +110,6 @@ const VideoCall = ({
         { userId, username }
       ]);
 
-      // Send offer to new participant
       await createOffer(userId, username);
     };
 
@@ -219,44 +134,40 @@ const VideoCall = ({
       }
     };
 
-    const handleScreenShareStarted = (data) => {
-      console.log('🖥️ [VideoCall] Remote screen share started:', data.userId);
-      // State is managed in useWebRTC
-    };
-
-    const handleScreenShareStopped = (data) => {
-      console.log('🖥️ [VideoCall] Remote screen share stopped:', data.userId);
-    };
-
-    const handleTrackToggle = (data) => {
-      console.log(`🎥 [VideoCall] Remote track toggle: ${data.trackKind} = ${data.enabled}`);
-      // Track state is managed in useWebRTC
-    };
-
-    // Register handlers
     socket.on('video_participant_joined', handleParticipantJoined);
     socket.on('video_participant_left', handleParticipantLeft);
     socket.on('video_current_participants', handleCurrentParticipants);
     socket.on('video_offer', handleOffer);
     socket.on('video_answer', handleAnswer);
     socket.on('video_ice_candidate', handleIceCandidate);
-    socket.on('screen_share_started', handleScreenShareStarted);
-    socket.on('screen_share_stopped', handleScreenShareStopped);
-    socket.on('video_track_toggle', handleTrackToggle);
+    
+    // ✅ Handle remote screen share events
+    socket.on('screen_share_started', (data) => {
+      handleRemoteScreenShareStarted(data.userId);
+    });
+    
+    socket.on('screen_share_stopped', (data) => {
+      handleRemoteScreenShareStopped(data.userId);
+    });
+
+    socket.on('video_track_toggle', (data) => {
+      console.log(`🎥 [VideoCall] Track toggle: ${data.trackKind} = ${data.enabled}`);
+    });
 
     return () => {
-      socket.off('video_participant_joined', handleParticipantJoined);
-      socket.off('video_participant_left', handleParticipantLeft);
-      socket.off('video_current_participants', handleCurrentParticipants);
-      socket.off('video_offer', handleOffer);
-      socket.off('video_answer', handleAnswer);
-      socket.off('video_ice_candidate', handleIceCandidate);
-      socket.off('screen_share_started', handleScreenShareStarted);
-      socket.off('screen_share_stopped', handleScreenShareStopped);
-      socket.off('video_track_toggle', handleTrackToggle);
+      socket.off('video_participant_joined');
+      socket.off('video_participant_left');
+      socket.off('video_current_participants');
+      socket.off('video_offer');
+      socket.off('video_answer');
+      socket.off('video_ice_candidate');
+      socket.off('screen_share_started');
+      socket.off('screen_share_stopped');
+      socket.off('video_track_toggle');
     };
   }, [socket, currentUser.id, createOffer, handleOffer, handleAnswer, 
-      handleIceCandidate, cleanupPeerConnection]);
+      handleIceCandidate, cleanupPeerConnection, handleRemoteScreenShareStarted,
+      handleRemoteScreenShareStopped]);
 
   // Control handlers
   const handleToggleMute = useCallback(() => {
@@ -303,19 +214,22 @@ const VideoCall = ({
     onEndCall();
   }, [cleanup, socket, roomId, projectId, currentUser.id, onEndCall]);
 
-  // Memoized participant count
-  const participantCount = useMemo(() => {
-    return remoteStreams.size + 1;
-  }, [remoteStreams.size]);
+  const participantCount = useMemo(() => remoteStreams.size + 1, [remoteStreams.size]);
 
-  // Error display
   if (error) {
     return (
       <div style={{
-        ...styles.container,
+        position: 'fixed',
+        top: 0,
         left: isSidebarCollapsed ? '60px' : '250px',
+        right: 0,
+        bottom: 0,
+        backgroundColor: '#0F1116',
+        zIndex: 9999,
+        display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        transition: 'left 0.3s ease'
       }}>
         <div style={{ textAlign: 'center', color: 'white', padding: '40px' }}>
           <VideoOff size={64} color="#ef4444" style={{ marginBottom: '20px' }} />
@@ -329,8 +243,7 @@ const VideoCall = ({
               color: 'white',
               border: 'none',
               borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px'
+              cursor: 'pointer'
             }}
           >
             Go Back
@@ -344,45 +257,52 @@ const VideoCall = ({
     <div 
       ref={containerRef}
       style={{
-        ...styles.container,
-        left: isSidebarCollapsed ? '60px' : '250px'
+        position: 'fixed',
+        top: 0,
+        left: isSidebarCollapsed ? '60px' : '250px',
+        right: 0,
+        bottom: 0,
+        backgroundColor: '#0F1116',
+        zIndex: 9999,
+        display: 'flex',
+        flexDirection: 'column',
+        transition: 'left 0.3s ease'
       }}
     >
       {/* Header */}
-      <div style={styles.header}>
-        <div style={styles.headerLeft}>
+      <div style={{
+        padding: '16px 24px',
+        backgroundColor: 'rgba(26, 28, 32, 0.95)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <Video size={24} color="#3b82f6" />
           <div>
-            <h2 style={styles.title}>Video Call</h2>
-            <p style={styles.subtitle}>
+            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: 'white' }}>
+              Video Call
+            </h2>
+            <p style={{ margin: 0, fontSize: '14px', color: '#9ca3af' }}>
               {participantCount} participant{participantCount !== 1 ? 's' : ''}
             </p>
           </div>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <ConnectionStatus status={callStatus} />
-          
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            style={{
-              padding: '8px',
-              backgroundColor: 'transparent',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              color: 'white'
-            }}
-          >
-            <Settings size={20} />
-          </button>
-        </div>
+        <ConnectionStatus status={callStatus} />
       </div>
 
-      {/* Main Content - Video Grid */}
-      <div style={styles.mainContent}>
+      {/* Main Content */}
+      <div style={{
+        flex: 1,
+        padding: '16px',
+        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px'
+      }}>
+        {/* ✅ Pass BOTH localStream (camera) and screenStream separately */}
         <VideoGrid
-          localVideoRef={localVideoRef}
           localStream={localStream}
           screenStream={screenStream}
           remoteStreams={remoteStreams}
@@ -396,7 +316,15 @@ const VideoCall = ({
       </div>
 
       {/* Control Bar */}
-      <div style={styles.controlBar}>
+      <div style={{
+        padding: '20px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '20px',
+        backgroundColor: 'rgba(26, 28, 32, 0.95)',
+        borderTop: '1px solid rgba(255, 255, 255, 0.1)'
+      }}>
         <VideoControls
           isMuted={isMuted}
           isVideoOff={isVideoOff}
