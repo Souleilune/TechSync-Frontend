@@ -1,5 +1,5 @@
 // frontend/src/components/chat/VideoGrid.js
-// ✅ FIXED: Properly handles separate camera and screen streams
+// ✅ FIXED: Moved useMemo before conditional returns
 
 import React, { useMemo, useRef, useEffect } from 'react';
 import { VideoOff, MicOff, Monitor, Wifi, WifiOff } from 'lucide-react';
@@ -166,8 +166,8 @@ const VideoTile = ({
 };
 
 const VideoGrid = ({
-  localStream,      // Camera stream (always)
-  screenStream,     // Screen share stream (when sharing)
+  localStream,
+  screenStream,
   remoteStreams,
   currentUser,
   isScreenSharing,
@@ -181,6 +181,8 @@ const VideoGrid = ({
   const totalParticipants = remoteStreams.size + 1;
   const hasScreenShare = isScreenSharing || (screenSharingUserId && screenSharingUserId !== 'local');
 
+  // ✅ FIXED: All hooks called BEFORE any conditional returns
+  
   // Update remote video refs
   useEffect(() => {
     remoteStreams.forEach((data, visitorId) => {
@@ -193,8 +195,25 @@ const VideoGrid = ({
     });
   }, [remoteStreams]);
 
-  // Get the screen share stream based on who's sharing
-  const getScreenShareInfo = () => {
+  // ✅ Calculate grid style regardless of screen share state
+  const gridStyle = useMemo(() => {
+    let columns;
+    if (totalParticipants === 1) columns = 1;
+    else if (totalParticipants === 2) columns = 2;
+    else if (totalParticipants <= 4) columns = 2;
+    else if (totalParticipants <= 9) columns = 3;
+    else columns = 4;
+
+    return {
+      display: 'grid',
+      gridTemplateColumns: `repeat(${columns}, 1fr)`,
+      gap: '12px',
+      alignContent: 'start'
+    };
+  }, [totalParticipants]);
+
+  // ✅ Calculate screen share info regardless of whether we use it
+  const screenShareInfo = useMemo(() => {
     if (isScreenSharing && screenStream) {
       // Local user is sharing
       return {
@@ -214,11 +233,11 @@ const VideoGrid = ({
       }
     }
     return null;
-  };
+  }, [isScreenSharing, screenStream, screenSharingUserId, remoteStreams, currentUser.username]);
 
-  const screenShareInfo = getScreenShareInfo();
-
-  // ✅ SCREEN SHARE LAYOUT: Featured screen + thumbnail strip
+  // ✅ NOW we can do conditional rendering (after all hooks)
+  
+  // SCREEN SHARE LAYOUT: Featured screen + thumbnail strip
   if (hasScreenShare && screenShareInfo) {
     return (
       <div style={{
@@ -248,55 +267,32 @@ const VideoGrid = ({
           overflowX: 'auto',
           padding: '4px'
         }}>
-          {/* ✅ LOCAL CAMERA - Always shows camera, NOT screen */}
+          {/* LOCAL CAMERA - Always shows camera, NOT screen */}
           <VideoTile
             stream={localStream}
             username={currentUser.username}
             isLocal={true}
             isVideoOff={isVideoOff}
             isMuted={isMuted}
-            mirrored={true}  // Mirror local camera
+            mirrored={true}
           />
 
           {/* Remote Participants */}
-          {Array.from(remoteStreams.entries())
-            .filter(([visitorId]) => {
-              // If remote user is screen sharing, their main stream shows screen
-              // We still show them in thumbnails
-              return true;
-            })
-            .map(([visitorId, data]) => (
-              <VideoTile
-                key={visitorId}
-                stream={data.stream}
-                username={data.username}
-                connectionState={peerStates.get(visitorId)}
-                // If this user is screen sharing, we're seeing their screen, not camera
-                isScreenShare={screenSharingUserId === visitorId}
-              />
-            ))}
+          {Array.from(remoteStreams.entries()).map(([visitorId, data]) => (
+            <VideoTile
+              key={visitorId}
+              stream={data.stream}
+              username={data.username}
+              connectionState={peerStates.get(visitorId)}
+              isScreenShare={screenSharingUserId === visitorId}
+            />
+          ))}
         </div>
       </div>
     );
   }
 
-  // ✅ NORMAL GRID LAYOUT: No screen share active
-  const gridStyle = useMemo(() => {
-    let columns;
-    if (totalParticipants === 1) columns = 1;
-    else if (totalParticipants === 2) columns = 2;
-    else if (totalParticipants <= 4) columns = 2;
-    else if (totalParticipants <= 9) columns = 3;
-    else columns = 4;
-
-    return {
-      display: 'grid',
-      gridTemplateColumns: `repeat(${columns}, 1fr)`,
-      gap: '12px',
-      alignContent: 'start'
-    };
-  }, [totalParticipants]);
-
+  // NORMAL GRID LAYOUT: No screen share active
   return (
     <div style={gridStyle}>
       {/* Local Camera */}
