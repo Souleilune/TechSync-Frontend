@@ -1,14 +1,12 @@
 // frontend/src/components/chat/VideoCall.js
-// ✅ PRODUCTION-READY VERSION - Complete Screen Share Fix
-// Critical Understanding:
-// - Camera feed and screen share are SEPARATE video tracks
-// - Only ONE video track can be sent per peer connection at a time
-// - When screen sharing: screen replaces camera in peer connections
-// - Camera toggle during screen share should be stored but NOT affect peers
-// - When screen share stops: restore camera track to peers with correct enabled state
+// Production-ready VideoCall component
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useWebRTC } from '../../hooks/useWebRTC';
 import VideoCallChat from './VideoCallChat';
+import VideoGrid from './VideoGrid';
+import VideoControls from './VideoControls';
+import ConnectionStatus from './ConnectionStatus';
 import { 
   Video, 
   VideoOff, 
@@ -18,8 +16,66 @@ import {
   Monitor, 
   MonitorOff,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Settings,
+  Users
 } from 'lucide-react';
+
+// Styles
+const styles = {
+  container: {
+    position: 'fixed',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#0F1116',
+    zIndex: 9999,
+    display: 'flex',
+    flexDirection: 'column',
+    transition: 'left 0.3s ease'
+  },
+  header: {
+    padding: '16px 24px',
+    backgroundColor: 'rgba(26, 28, 32, 0.95)',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  headerLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px'
+  },
+  title: {
+    margin: 0,
+    fontSize: '18px',
+    fontWeight: '600',
+    color: 'white'
+  },
+  subtitle: {
+    margin: 0,
+    fontSize: '14px',
+    color: '#9ca3af'
+  },
+  mainContent: {
+    flex: 1,
+    padding: '16px',
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px'
+  },
+  controlBar: {
+    padding: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '20px',
+    backgroundColor: 'rgba(26, 28, 32, 0.95)',
+    borderTop: '1px solid rgba(255, 255, 255, 0.1)'
+  }
+};
 
 const VideoCall = ({ 
   socket, 
@@ -29,60 +85,47 @@ const VideoCall = ({
   onEndCall,
   isInitiator = false 
 }) => {
-  // State management
-  const [localStream, setLocalStream] = useState(null);
-  const [remoteStreams, setRemoteStreams] = useState(new Map());
+  // Local UI state
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [participants, setParticipants] = useState([]);
   const [callStatus, setCallStatus] = useState('connecting');
-  const [screenSharingUser, setScreenSharingUser] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Refs
   const localVideoRef = useRef(null);
-  const remoteVideosRef = useRef({});
-  const peerConnections = useRef(new Map());
-  const screenStream = useRef(null);
   const containerRef = useRef(null);
-  const pendingCandidates = useRef(new Map());
-  
-  // ✅ NEW: Track the original camera track separately
-  const originalCameraTrack = useRef(null);
 
-  // ICE servers configuration
-  const iceServers = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' },
-      {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      }
-    ],
-    iceCandidatePoolSize: 10
-  };
-
+  // Sidebar state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem('projectSidebarCollapsed');
     return saved === 'true';
   });
 
+  // WebRTC hook
+  const {
+    localStream,
+    screenStream,
+    remoteStreams,
+    peerStates,
+    isScreenSharing,
+    screenSharingUserId,
+    error,
+    initializeMedia,
+    createOffer,
+    handleOffer,
+    handleAnswer,
+    handleIceCandidate,
+    toggleAudio,
+    toggleVideo,
+    startScreenShare,
+    stopScreenShare,
+    cleanupPeerConnection,
+    cleanup
+  } = useWebRTC({ socket, roomId, projectId, currentUser });
+
+  // Sidebar toggle listener
   useEffect(() => {
     const handleSidebarToggle = (event) => {
       setIsSidebarCollapsed(event.detail.collapsed);
@@ -92,595 +135,155 @@ const VideoCall = ({
     return () => window.removeEventListener('projectSidebarToggle', handleSidebarToggle);
   }, []);
 
-  // Initialize local media stream
-  const initializeMedia = useCallback(async () => {
-    try {
-      console.log('🎥 [VIDEO] Requesting camera and microphone permissions...');
-      
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30 }
-        },
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
-      });
-
-      console.log('✅ [VIDEO] Got media stream:', stream.id);
-      
-      // ✅ CRITICAL: Store reference to original camera track
-      originalCameraTrack.current = stream.getVideoTracks()[0];
-      
-      setLocalStream(stream);
-      
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
-
-      socket.emit('video_call_join', {
-        roomId,
-        projectId,
-        userId: currentUser.id,
-        username: currentUser.username,
-        avatarUrl: currentUser.avatar_url
-      });
-
-      console.log('✅ [VIDEO] Joined video room');
-      setCallStatus('connected');
-    } catch (error) {
-      console.error('❌ [VIDEO] Failed to get media:', error);
-      
-      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-        alert('Camera/microphone permission denied. Please allow access and try again.');
-      } else if (error.name === 'NotFoundError') {
-        alert('No camera or microphone found. Please connect a device and try again.');
-      } else {
-        alert('Failed to access camera/microphone: ' + error.message);
-      }
-      
-      setCallStatus('ended');
-    }
-  }, [socket, roomId, projectId, currentUser]);
-
-  const getOrCreatePeerConnection = useCallback((userId, username) => {
-    let pc = peerConnections.current.get(userId);
-    if (pc) {
-      console.log(`♻️ [VIDEO] Reusing existing peer connection for ${username}`);
-      return pc;
-    }
-
-    if (!localStream) {
-      console.error('❌ [VIDEO] Cannot create peer connection - no local stream');
-      return null;
-    }
-
-    try {
-      console.log(`🔗 [VIDEO] Creating new peer connection for ${username} (${userId})`);
-      
-      pc = new RTCPeerConnection(iceServers);
-      
-      pc.makingOffer = false;
-      pc.polite = currentUser.id < userId;
-      pc.lastRemoteSdpId = null;
-      
-      console.log(`🤝 [VIDEO] Peer ${username} - We are ${pc.polite ? 'polite' : 'impolite'}`);
-
-      // Add local stream tracks
-      localStream.getTracks().forEach(track => {
-        pc.addTrack(track, localStream);
-        console.log(`✅ [VIDEO] Added ${track.kind} track to ${username}`);
-      });
-
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          socket.emit('video_ice_candidate', {
-            roomId,
-            projectId,
-            targetUserId: userId,
-            candidate: {
-              candidate: event.candidate.candidate,
-              sdpMid: event.candidate.sdpMid,
-              sdpMLineIndex: event.candidate.sdpMLineIndex,
-              usernameFragment: event.candidate.usernameFragment
-            }
-          });
-        }
-      };
-
-      pc.ontrack = (event) => {
-        console.log(`📹 [VIDEO] Received track from ${username}: ${event.track.kind}`);
+  // Initialize call
+  useEffect(() => {
+    const startCall = async () => {
+      try {
+        await initializeMedia('medium');
         
-        let stream;
-        if (event.streams && event.streams.length > 0) {
-          stream = event.streams[0];
-        } else {
-          stream = new MediaStream([event.track]);
-        }
-        
-        setRemoteStreams(prev => {
-          const newMap = new Map(prev);
-          const existingData = newMap.get(userId);
-          
-          if (existingData?.stream) {
-            const trackExists = existingData.stream.getTracks().some(t => t.id === event.track.id);
-            if (!trackExists) {
-              existingData.stream.addTrack(event.track);
-              console.log(`✅ [VIDEO] Added ${event.track.kind} track to existing stream for ${username}`);
-            }
-          } else {
-            newMap.set(userId, {
-              stream: stream,
-              username: username
-            });
-            console.log(`✅ [VIDEO] Created new stream entry for ${username}`);
-          }
-          
-          return newMap;
-        });
-      };
-
-      pc.oniceconnectionstatechange = () => {
-        if (pc.iceConnectionState === 'failed') {
-          console.error(`❌ [VIDEO] ICE connection failed with ${username}`);
-          pc.restartIce();
-        }
-      };
-
-      pc.onconnectionstatechange = () => {
-        console.log(`🔌 [VIDEO] Connection state with ${username}: ${pc.connectionState}`);
-        
-        if (pc.connectionState === 'failed') {
-          setTimeout(() => {
-            if (pc.connectionState === 'failed') {
-              handleRemoveParticipant(userId);
-            }
-          }, 5000);
-        } else if (pc.connectionState === 'disconnected') {
-          setTimeout(() => {
-            if (pc.connectionState === 'disconnected') {
-              handleRemoveParticipant(userId);
-            }
-          }, 5000);
-        }
-      };
-
-      peerConnections.current.set(userId, pc);
-      
-      const pending = pendingCandidates.current.get(userId);
-      if (pending && pending.length > 0) {
-        console.log(`🧊 [VIDEO] Processing ${pending.length} pending ICE candidates for ${username}`);
-        pending.forEach(candidate => {
-          const iceCandidate = new RTCIceCandidate({
-            candidate: candidate.candidate,
-            sdpMid: candidate.sdpMid,
-            sdpMLineIndex: candidate.sdpMLineIndex,
-            usernameFragment: candidate.usernameFragment
-          });
-          pc.addIceCandidate(iceCandidate).catch(err => {
-            console.error(`❌ [VIDEO] Failed to add pending ICE candidate:`, err);
-          });
-        });
-        pendingCandidates.current.delete(userId);
-      }
-      
-      return pc;
-    } catch (error) {
-      console.error(`❌ [VIDEO] Failed to create peer connection for ${username}:`, error);
-      return null;
-    }
-  }, [localStream, socket, roomId, projectId, currentUser.id]);
-
-  const handleNewParticipant = useCallback(async (data) => {
-    const { userId, username } = data;
-    
-    if (userId === currentUser.id) return;
-
-    console.log(`👤 [VIDEO] New participant: ${username}`);
-    setParticipants(prev => [...prev.filter(p => p.userId !== userId), { userId, username }]);
-
-    setRemoteStreams(prev => {
-      const newMap = new Map(prev);
-      newMap.set(userId, { 
-        stream: null,
-        username: username 
-      });
-      return newMap;
-    });
-
-    const pc = getOrCreatePeerConnection(userId, username);
-    if (!pc) return;
-
-    try {
-      pc.makingOffer = true;
-      
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      
-      const sdpId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-      socket.emit('video_offer', {
-        roomId,
-        projectId,
-        targetUserId: userId,
-        offer: pc.localDescription,
-        sdpId
-      });
-      
-      console.log(`✅ [VIDEO] Sent offer to ${username}`);
-    } catch (error) {
-      console.error(`❌ [VIDEO] Failed to create offer for ${username}:`, error);
-    } finally {
-      pc.makingOffer = false;
-    }
-  }, [currentUser.id, getOrCreatePeerConnection, socket, roomId, projectId]);
-
-  const handleVideoOffer = useCallback(async (data) => {
-    const { userId, username, offer, sdpId } = data;
-    
-    console.log(`📨 [VIDEO] Received offer from ${username}`);
-
-    const pc = getOrCreatePeerConnection(userId, username);
-    if (!pc) return;
-
-    try {
-      if (sdpId && pc.lastRemoteSdpId === sdpId) {
-        console.warn(`⚠️ [VIDEO] Ignoring duplicate offer from ${username}`);
-        return;
-      }
-      
-      const isPolite = pc.polite;
-      const offerCollision = (pc.signalingState !== 'stable' || pc.makingOffer);
-      
-      if (offerCollision) {
-        if (!isPolite) {
-          console.log(`🤝 [VIDEO] Impolite: Ignoring incoming offer`);
-          return;
-        }
-        
-        console.log(`🤝 [VIDEO] Polite: Rolling back local offer`);
-        try {
-          await pc.setLocalDescription({type: 'rollback'});
-        } catch (rollbackError) {
-          console.error(`❌ [VIDEO] Rollback failed:`, rollbackError);
-        }
-      }
-      
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      
-      if (sdpId) {
-        pc.lastRemoteSdpId = sdpId;
-      }
-      
-      const pending = pendingCandidates.current.get(userId);
-      if (pending && pending.length > 0) {
-        for (const candidate of pending) {
-          try {
-            const iceCandidate = new RTCIceCandidate({
-              candidate: candidate.candidate,
-              sdpMid: candidate.sdpMid,
-              sdpMLineIndex: candidate.sdpMLineIndex,
-              usernameFragment: candidate.usernameFragment
-            });
-            await pc.addIceCandidate(iceCandidate);
-          } catch (err) {
-            console.error(`❌ [VIDEO] Failed to add pending candidate:`, err);
-          }
-        }
-        pendingCandidates.current.delete(userId);
-      }
-      
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      
-      const answerSdpId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-      socket.emit('video_answer', {
-        roomId,
-        projectId,
-        targetUserId: userId,
-        answer: pc.localDescription,
-        sdpId: answerSdpId
-      });
-
-      setParticipants(prev => [...prev.filter(p => p.userId !== userId), { userId, username }]);
-    } catch (error) {
-      console.error(`❌ [VIDEO] Failed to handle offer from ${username}:`, error);
-    }
-  }, [getOrCreatePeerConnection, socket, roomId, projectId]);
-
-  const handleVideoAnswer = useCallback(async (data) => {
-    const { userId, answer, sdpId } = data;
-    
-    const pc = peerConnections.current.get(userId);
-    if (!pc) {
-      console.error(`❌ [VIDEO] No peer connection found for user ${userId}`);
-      return;
-    }
-
-    try {
-      if (sdpId && pc.lastRemoteSdpId === sdpId) {
-        console.warn(`⚠️ [VIDEO] Ignoring duplicate answer`);
-        return;
-      }
-      
-      if (pc.signalingState === 'stable') {
-        console.warn(`⚠️ [VIDEO] PC already in stable state, ignoring answer`);
-        return;
-      }
-      
-      await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      
-      if (sdpId) {
-        pc.lastRemoteSdpId = sdpId;
-      }
-      
-      const pending = pendingCandidates.current.get(userId);
-      if (pending && pending.length > 0) {
-        for (const candidate of pending) {
-          try {
-            const iceCandidate = new RTCIceCandidate({
-              candidate: candidate.candidate,
-              sdpMid: candidate.sdpMid,
-              sdpMLineIndex: candidate.sdpMLineIndex,
-              usernameFragment: candidate.usernameFragment
-            });
-            await pc.addIceCandidate(iceCandidate);
-          } catch (err) {
-            console.error(`❌ [VIDEO] Failed to add pending candidate:`, err);
-          }
-        }
-        pendingCandidates.current.delete(userId);
-      }
-    } catch (error) {
-      console.error(`❌ [VIDEO] Failed to handle answer:`, error);
-    }
-  }, []);
-
-  const handleIceCandidate = useCallback(async (data) => {
-    const { userId, candidate } = data;
-    
-    const pc = peerConnections.current.get(userId);
-    if (!pc || !pc.remoteDescription) {
-      if (!pendingCandidates.current.has(userId)) {
-        pendingCandidates.current.set(userId, []);
-      }
-      pendingCandidates.current.get(userId).push(candidate);
-      return;
-    }
-
-    try {
-      const iceCandidate = new RTCIceCandidate({
-        candidate: candidate.candidate,
-        sdpMid: candidate.sdpMid,
-        sdpMLineIndex: candidate.sdpMLineIndex,
-        usernameFragment: candidate.usernameFragment
-      });
-      
-      await pc.addIceCandidate(iceCandidate);
-    } catch (error) {
-      console.error(`❌ [VIDEO] Failed to add ICE candidate:`, error);
-    }
-  }, []);
-
-  const handleRemoveParticipant = useCallback((userId) => {
-    console.log(`👋 [VIDEO] Participant left: ${userId}`);
-    
-    const pc = peerConnections.current.get(userId);
-    if (pc) {
-      pc.close();
-      peerConnections.current.delete(userId);
-    }
-
-    pendingCandidates.current.delete(userId);
-
-    setRemoteStreams(prev => {
-      const newMap = new Map(prev);
-      newMap.delete(userId);
-      return newMap;
-    });
-
-    setParticipants(prev => prev.filter(p => p.userId !== userId));
-    
-    if (screenSharingUser === userId) {
-      setScreenSharingUser(null);
-    }
-  }, [screenSharingUser]);
-
-  const toggleMute = useCallback(() => {
-    if (localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setIsMuted(!audioTrack.enabled);
-        
-        console.log('🎤 [VIDEO] Microphone:', audioTrack.enabled ? 'ON' : 'OFF');
-        
-        socket.emit('video_track_toggle', {
+        socket.emit('video_call_join', {
           roomId,
           projectId,
           userId: currentUser.id,
-          trackKind: 'audio',
-          enabled: audioTrack.enabled
+          username: currentUser.username,
+          avatarUrl: currentUser.avatar_url
         });
+
+        setCallStatus('connected');
+      } catch (err) {
+        console.error('❌ [VideoCall] Failed to start call:', err);
+        setCallStatus('failed');
       }
-    }
-  }, [localStream, socket, roomId, projectId, currentUser.id]);
+    };
 
-  // ✅ FIXED: Toggle video now considers screen sharing state
-  const toggleVideo = useCallback(() => {
-    if (!originalCameraTrack.current) {
-      console.error('❌ [VIDEO] No camera track available');
-      return;
-    }
+    startCall();
 
-    // ✅ Toggle the camera track enabled state
-    const newEnabledState = !originalCameraTrack.current.enabled;
-    originalCameraTrack.current.enabled = newEnabledState;
-    setIsVideoOff(!newEnabledState);
-    
-    console.log('📹 [VIDEO] Camera:', newEnabledState ? 'ON' : 'OFF');
-    console.log('📹 [VIDEO] Screen sharing active:', isScreenSharing);
-
-    // ✅ CRITICAL: Only notify peers about camera state if NOT screen sharing
-    // During screen share, peers are receiving screen track, not camera
-    // But we still track the camera state for when screen share stops
-    if (!isScreenSharing) {
-      socket.emit('video_track_toggle', {
+    return () => {
+      cleanup();
+      socket.emit('video_call_leave', {
         roomId,
         projectId,
-        userId: currentUser.id,
-        trackKind: 'video',
-        enabled: newEnabledState
+        userId: currentUser.id
       });
-    } else {
-      console.log('📹 [VIDEO] Camera toggle stored (will apply when screen share stops)');
+    };
+  }, []);
+
+  // Update local video element
+  useEffect(() => {
+    if (localVideoRef.current) {
+      if (isScreenSharing && screenStream) {
+        localVideoRef.current.srcObject = screenStream;
+      } else if (localStream) {
+        localVideoRef.current.srcObject = localStream;
+      }
     }
-  }, [socket, roomId, projectId, currentUser.id, isScreenSharing]);
+  }, [localStream, screenStream, isScreenSharing]);
 
-  // ✅ COMPLETE REWRITE: Screen share management
-  const toggleScreenShare = useCallback(async () => {
+  // Socket event handlers
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleParticipantJoined = async (data) => {
+      const { userId, username } = data;
+      if (userId === currentUser.id) return;
+
+      console.log(`👤 [VideoCall] Participant joined: ${username}`);
+      
+      setParticipants(prev => [
+        ...prev.filter(p => p.userId !== userId),
+        { userId, username }
+      ]);
+
+      // Send offer to new participant
+      await createOffer(userId, username);
+    };
+
+    const handleParticipantLeft = (data) => {
+      console.log(`👋 [VideoCall] Participant left: ${data.userId}`);
+      cleanupPeerConnection(data.userId);
+      setParticipants(prev => prev.filter(p => p.userId !== data.userId));
+    };
+
+    const handleCurrentParticipants = async (data) => {
+      console.log('👥 [VideoCall] Current participants:', data.participants);
+      
+      for (const participant of data.participants) {
+        if (participant.userId === currentUser.id) continue;
+        
+        setParticipants(prev => [
+          ...prev.filter(p => p.userId !== participant.userId),
+          { userId: participant.userId, username: participant.username }
+        ]);
+        
+        await createOffer(participant.userId, participant.username);
+      }
+    };
+
+    const handleScreenShareStarted = (data) => {
+      console.log('🖥️ [VideoCall] Remote screen share started:', data.userId);
+      // State is managed in useWebRTC
+    };
+
+    const handleScreenShareStopped = (data) => {
+      console.log('🖥️ [VideoCall] Remote screen share stopped:', data.userId);
+    };
+
+    const handleTrackToggle = (data) => {
+      console.log(`🎥 [VideoCall] Remote track toggle: ${data.trackKind} = ${data.enabled}`);
+      // Track state is managed in useWebRTC
+    };
+
+    // Register handlers
+    socket.on('video_participant_joined', handleParticipantJoined);
+    socket.on('video_participant_left', handleParticipantLeft);
+    socket.on('video_current_participants', handleCurrentParticipants);
+    socket.on('video_offer', handleOffer);
+    socket.on('video_answer', handleAnswer);
+    socket.on('video_ice_candidate', handleIceCandidate);
+    socket.on('screen_share_started', handleScreenShareStarted);
+    socket.on('screen_share_stopped', handleScreenShareStopped);
+    socket.on('video_track_toggle', handleTrackToggle);
+
+    return () => {
+      socket.off('video_participant_joined', handleParticipantJoined);
+      socket.off('video_participant_left', handleParticipantLeft);
+      socket.off('video_current_participants', handleCurrentParticipants);
+      socket.off('video_offer', handleOffer);
+      socket.off('video_answer', handleAnswer);
+      socket.off('video_ice_candidate', handleIceCandidate);
+      socket.off('screen_share_started', handleScreenShareStarted);
+      socket.off('screen_share_stopped', handleScreenShareStopped);
+      socket.off('video_track_toggle', handleTrackToggle);
+    };
+  }, [socket, currentUser.id, createOffer, handleOffer, handleAnswer, 
+      handleIceCandidate, cleanupPeerConnection]);
+
+  // Control handlers
+  const handleToggleMute = useCallback(() => {
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    toggleAudio(!newMuted);
+  }, [isMuted, toggleAudio]);
+
+  const handleToggleVideo = useCallback(() => {
+    const newVideoOff = !isVideoOff;
+    setIsVideoOff(newVideoOff);
+    toggleVideo(!newVideoOff);
+  }, [isVideoOff, toggleVideo]);
+
+  const handleToggleScreenShare = useCallback(async () => {
     try {
-      if (!isScreenSharing) {
-        console.log('🖥️ [VIDEO] Starting screen share...');
-        
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { cursor: 'always' },
-          audio: false
-        });
-
-        screenStream.current = stream;
-        const screenVideoTrack = stream.getVideoTracks()[0];
-        
-        // ✅ Update local video to show screen share
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-
-        // ✅ Replace camera with screen in all peer connections
-        peerConnections.current.forEach((pc, userId) => {
-          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-          if (sender) {
-            sender.replaceTrack(screenVideoTrack)
-              .then(() => console.log(`✅ [VIDEO] Screen track sent to user ${userId}`))
-              .catch(err => console.error(`❌ [VIDEO] Failed to send screen to ${userId}:`, err));
-          }
-        });
-
-        // Handle when user stops sharing via browser button
-        screenVideoTrack.onended = () => {
-          console.log('🖥️ [VIDEO] Screen share ended by browser');
-          toggleScreenShare();
-        };
-
-        setIsScreenSharing(true);
-        setScreenSharingUser('local');
-
-        socket.emit('screen_share_started', {
-          roomId,
-          projectId,
-          userId: currentUser.id
-        });
-
+      if (isScreenSharing) {
+        await stopScreenShare();
       } else {
-        console.log('🛑 [VIDEO] Stopping screen share...');
-        
-        // ✅ Stop screen share tracks
-        if (screenStream.current) {
-          screenStream.current.getTracks().forEach(track => track.stop());
-          screenStream.current = null;
-        }
-
-        // ✅ CRITICAL: Restore camera track to peer connections
-        if (originalCameraTrack.current) {
-          console.log('📹 [VIDEO] Restoring camera track...');
-          console.log('📹 [VIDEO] Camera track state:', {
-            readyState: originalCameraTrack.current.readyState,
-            enabled: originalCameraTrack.current.enabled,
-            isVideoOff: isVideoOff
-          });
-
-          // ✅ Camera track should maintain its enabled state (from toggleVideo)
-          // isVideoOff already reflects the current camera state
-          
-          // ✅ Restore local video to show camera
-          if (localVideoRef.current && localStream) {
-            localVideoRef.current.srcObject = localStream;
-          }
-
-          // ✅ Replace screen with camera in all peer connections
-          const replacePromises = [];
-          peerConnections.current.forEach((pc, userId) => {
-            const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-            if (sender) {
-              const promise = sender.replaceTrack(originalCameraTrack.current)
-                .then(() => {
-                  console.log(`✅ [VIDEO] Camera track restored to user ${userId}`);
-                })
-                .catch(err => {
-                  console.error(`❌ [VIDEO] Failed to restore camera to ${userId}:`, err);
-                });
-              replacePromises.push(promise);
-            }
-          });
-
-          await Promise.allSettled(replacePromises);
-          
-          // ✅ Now notify peers about the current camera state
-          socket.emit('video_track_toggle', {
-            roomId,
-            projectId,
-            userId: currentUser.id,
-            trackKind: 'video',
-            enabled: originalCameraTrack.current.enabled
-          });
-          
-          console.log('✅ [VIDEO] Camera restored with enabled state:', originalCameraTrack.current.enabled);
-        }
-
-        setIsScreenSharing(false);
-        setScreenSharingUser(null);
-
-        socket.emit('screen_share_stopped', {
-          roomId,
-          projectId,
-          userId: currentUser.id
-        });
+        await startScreenShare();
       }
     } catch (error) {
-      console.error('❌ [VIDEO] Screen share error:', error);
-      
-      // ✅ Cleanup on error
-      if (screenStream.current) {
-        screenStream.current.getTracks().forEach(track => track.stop());
-        screenStream.current = null;
-      }
-      
-      // ✅ Restore camera
-      if (originalCameraTrack.current && localStream) {
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = localStream;
-        }
-        
-        peerConnections.current.forEach((pc) => {
-          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-          if (sender) {
-            sender.replaceTrack(originalCameraTrack.current).catch(err => 
-              console.error(`❌ [VIDEO] Error restoring camera:`, err)
-            );
-          }
-        });
-      }
-      
-      setIsScreenSharing(false);
-      setScreenSharingUser(null);
+      console.error('Screen share error:', error);
     }
-  }, [isScreenSharing, localStream, isVideoOff, socket, roomId, projectId, currentUser.id]);
+  }, [isScreenSharing, startScreenShare, stopScreenShare]);
 
-  const toggleFullScreen = useCallback(() => {
+  const handleToggleFullScreen = useCallback(() => {
     if (!document.fullscreenElement) {
       containerRef.current?.requestFullscreen();
       setIsFullScreen(true);
@@ -691,523 +294,128 @@ const VideoCall = ({
   }, []);
 
   const handleEndCall = useCallback(() => {
-    console.log('🔴 [VIDEO] Ending call...');
-    
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
-    }
-    if (screenStream.current) {
-      screenStream.current.getTracks().forEach(track => track.stop());
-    }
-
-    peerConnections.current.forEach(pc => pc.close());
-    peerConnections.current.clear();
-    pendingCandidates.current.clear();
-
+    cleanup();
     socket.emit('video_call_leave', {
       roomId,
       projectId,
       userId: currentUser.id
     });
-
-    setCallStatus('ended');
     onEndCall();
-  }, [localStream, socket, roomId, projectId, currentUser.id, onEndCall]);
+  }, [cleanup, socket, roomId, projectId, currentUser.id, onEndCall]);
 
-  // Socket listeners
-  useEffect(() => {
-    if (!socket) return;
+  // Memoized participant count
+  const participantCount = useMemo(() => {
+    return remoteStreams.size + 1;
+  }, [remoteStreams.size]);
 
-    socket.on('video_participant_joined', handleNewParticipant);
-    socket.on('video_offer', handleVideoOffer);
-    socket.on('video_answer', handleVideoAnswer);
-    socket.on('video_ice_candidate', handleIceCandidate);
-    socket.on('video_participant_left', (data) => handleRemoveParticipant(data.userId));
-    
-    socket.on('screen_share_started', (data) => {
-      console.log('🖥️ [VIDEO] Remote user started sharing:', data.userId);
-      setScreenSharingUser(data.userId);
-    });
-  
-    socket.on('screen_share_stopped', (data) => {
-      console.log('🖥️ [VIDEO] Remote user stopped sharing:', data.userId);
-      if (screenSharingUser === data.userId) {
-        setScreenSharingUser(null);
-      }
-    });
-
-    socket.on('video_track_toggle', (data) => {
-      const { userId, trackKind, enabled } = data;
-      console.log(`🎥 [VIDEO] Remote ${trackKind} from ${userId}: ${enabled ? 'ON' : 'OFF'}`);
-      
-      setRemoteStreams(prev => {
-        const newMap = new Map(prev);
-        const remoteData = newMap.get(userId);
-        
-        if (remoteData?.stream) {
-          const tracks = trackKind === 'video' 
-            ? remoteData.stream.getVideoTracks() 
-            : remoteData.stream.getAudioTracks();
-          
-          tracks.forEach(track => {
-            track.enabled = enabled;
-          });
-        }
-        
-        return newMap;
-      });
-    });
-
-    socket.on('video_current_participants', async (data) => {
-      console.log('👥 [VIDEO] Received current participants:', data.participants);
-      
-      const { participants: currentParticipants } = data;
-      
-      for (const participant of currentParticipants) {
-        const { userId, username } = participant;
-        
-        if (userId === currentUser.id) continue;
-        
-        setParticipants(prev => [...prev.filter(p => p.userId !== userId), { userId, username }]);
-        
-        setRemoteStreams(prev => {
-          const newMap = new Map(prev);
-          newMap.set(userId, { 
-            stream: null,
-            username: username 
-          });
-          return newMap;
-        });
-        
-        const pc = getOrCreatePeerConnection(userId, username);
-        if (!pc) continue;
-        
-        try {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          
-          socket.emit('video_offer', {
-            roomId,
-            projectId,
-            targetUserId: userId,
-            offer: pc.localDescription
-          });
-        } catch (error) {
-          console.error('❌ [VIDEO] Failed to create offer for existing participant:', error);
-        }
-      }
-    });
-  
-    return () => {
-      socket.off('video_participant_joined');
-      socket.off('video_offer');
-      socket.off('video_answer');
-      socket.off('video_ice_candidate');
-      socket.off('video_participant_left');
-      socket.off('screen_share_started');
-      socket.off('screen_share_stopped');
-      socket.off('video_track_toggle');
-      socket.off('video_current_participants');
-    };
-  }, [socket, handleNewParticipant, handleVideoOffer, handleVideoAnswer, handleIceCandidate, handleRemoveParticipant, screenSharingUser, getOrCreatePeerConnection, roomId, projectId, currentUser.id]);
-
-  useEffect(() => {
-    initializeMedia();
-
-    return () => {
-      if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-      }
-      if (screenStream.current) {
-        screenStream.current.getTracks().forEach(track => track.stop());
-      }
-
-      peerConnections.current.forEach(pc => pc.close());
-      peerConnections.current.clear();
-      pendingCandidates.current.clear();
-
-      if (socket) {
-        socket.emit('video_call_leave', {
-          roomId,
-          projectId,
-          userId: currentUser.id
-        });
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (localStream && localVideoRef.current && !isScreenSharing) {
-      if (localVideoRef.current.srcObject !== localStream) {
-        localVideoRef.current.srcObject = localStream;
-      }
-    }
-  }, [localStream, isScreenSharing]);
-
-  // Update remote video elements
-  useEffect(() => {
-    remoteStreams.forEach((data, userId) => {
-      const videoElement = remoteVideosRef.current[userId];
-      if (videoElement && data.stream) {
-        if (videoElement.srcObject !== data.stream) {
-          videoElement.srcObject = data.stream;
-        }
-      }
-    });
-  }, [remoteStreams]);
+  // Error display
+  if (error) {
+    return (
+      <div style={{
+        ...styles.container,
+        left: isSidebarCollapsed ? '60px' : '250px',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div style={{ textAlign: 'center', color: 'white', padding: '40px' }}>
+          <VideoOff size={64} color="#ef4444" style={{ marginBottom: '20px' }} />
+          <h2>Unable to Start Video Call</h2>
+          <p style={{ color: '#9ca3af', marginBottom: '20px' }}>{error}</p>
+          <button
+            onClick={onEndCall}
+            style={{
+              padding: '12px 24px',
+              backgroundColor: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '16px'
+            }}
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div 
       ref={containerRef}
       style={{
-        position: 'fixed',
-        top: 0,
-        left: isSidebarCollapsed ? '60px' : '250px',
-        right: 0,
-        bottom: 0,
-        backgroundColor: '#0F1116',
-        zIndex: 9999,
-        display: 'flex',
-        flexDirection: 'column',
-        transition: 'left 0.3s ease'
+        ...styles.container,
+        left: isSidebarCollapsed ? '60px' : '250px'
       }}
     >
-      <div style={{
-        padding: '16px 24px',
-        backgroundColor: 'rgba(26, 28, 32, 0.95)',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      {/* Header */}
+      <div style={styles.header}>
+        <div style={styles.headerLeft}>
           <Video size={24} color="#3b82f6" />
           <div>
-            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: 'white' }}>
-              Video Call
-            </h2>
-            <p style={{ margin: 0, fontSize: '14px', color: '#9ca3af' }}>
-              {participants.length + 1} participant{participants.length !== 0 ? 's' : ''}
+            <h2 style={styles.title}>Video Call</h2>
+            <p style={styles.subtitle}>
+              {participantCount} participant{participantCount !== 1 ? 's' : ''}
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{
-            padding: '6px 12px',
-            backgroundColor: callStatus === 'connected' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-            borderRadius: '6px',
-            fontSize: '14px',
-            color: callStatus === 'connected' ? '#10b981' : '#ef4444'
-          }}>
-            {callStatus === 'connected' ? 'Connected' : 'Connecting...'}
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <ConnectionStatus status={callStatus} />
+          
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            style={{
+              padding: '8px',
+              backgroundColor: 'transparent',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              color: 'white'
+            }}
+          >
+            <Settings size={20} />
+          </button>
         </div>
       </div>
 
-      <div style={{
-        flex: 1,
-        padding: '16px',
-        overflowY: 'auto',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px'
-      }}>
-        {screenSharingUser && (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            flex: 1,
-            minHeight: '400px'
-          }}>
-            <div style={{
-              position: 'relative',
-              backgroundColor: 'rgba(26, 28, 32, 0.95)',
-              borderRadius: '12px',
-              overflow: 'hidden',
-              flex: 1,
-              border: '2px solid rgba(16, 185, 129, 0.5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              {screenSharingUser === 'local' ? (
-                <video
-                  ref={el => {
-                    if (el && screenStream.current) {
-                      el.srcObject = screenStream.current;
-                    }
-                  }}
-                  autoPlay
-                  playsInline
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'contain',
-                    backgroundColor: '#000'
-                  }}
-                />
-              ) : (
-                <video
-                  ref={el => {
-                    const remoteData = remoteStreams.get(screenSharingUser);
-                    if (el && remoteData?.stream) {
-                      el.srcObject = remoteData.stream;
-                    }
-                  }}
-                  autoPlay
-                  playsInline
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'contain',
-                    backgroundColor: '#000'
-                  }}
-                />
-              )}
-              <div style={{
-                position: 'absolute',
-                top: '12px',
-                left: '12px',
-                padding: '8px 16px',
-                backgroundColor: 'rgba(16, 185, 129, 0.9)',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: 'white',
-                fontWeight: '600',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <Monitor size={16} />
-                {screenSharingUser === 'local' ? 'You are sharing your screen' : 
-                 `${remoteStreams.get(screenSharingUser)?.username || 'User'} is sharing`}
-              </div>
-            </div>
-
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 150px))',
-              gap: '8px',
-              maxHeight: '120px',
-              padding: '8px 0'
-            }}>
-              <div style={{
-                position: 'relative',
-                backgroundColor: 'rgba(26, 28, 32, 0.95)',
-                borderRadius: '8px',
-                overflow: 'hidden',
-                aspectRatio: '16/9',
-                border: screenSharingUser === 'local' ? 
-                       '2px solid rgba(59, 130, 246, 0.5)' : 
-                       '1px solid rgba(255, 255, 255, 0.1)'
-              }}>
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    transform: 'scaleX(-1)',
-                    display: isVideoOff ? 'none' : 'block'
-                  }}
-                />
-                {isVideoOff && (
-                  <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: 'rgba(26, 28, 32, 0.95)'
-                  }}>
-                    <VideoOff size={24} color="#ef4444" />
-                  </div>
-                )}
-                <div style={{
-                  position: 'absolute',
-                  bottom: '4px',
-                  left: '4px',
-                  padding: '3px 6px',
-                  backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                  borderRadius: '4px',
-                  fontSize: '10px',
-                  color: 'white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
-                  <span>{currentUser.username}</span>
-                  {isMuted && <MicOff size={10} color="#ef4444" />}
-                </div>
-              </div>
-
-              {Array.from(remoteStreams.entries()).map(([userId, data]) => (
-                <div
-                  key={userId}
-                  style={{
-                    position: 'relative',
-                    backgroundColor: 'rgba(26, 28, 32, 0.95)',
-                    borderRadius: '8px',
-                    overflow: 'hidden',
-                    aspectRatio: '16/9',
-                    border: '1px solid rgba(255, 255, 255, 0.1)'
-                  }}
-                >
-                  <video
-                    ref={el => remoteVideosRef.current[userId] = el}
-                    autoPlay
-                    playsInline
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover'
-                    }}
-                  />
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '4px',
-                    left: '4px',
-                    padding: '3px 6px',
-                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                    borderRadius: '4px',
-                    fontSize: '10px',
-                    color: 'white'
-                  }}>
-                    {data.username}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {!screenSharingUser && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: remoteStreams.size === 0 ? '1fr' : 
-                                remoteStreams.size === 1 ? 'repeat(2, 1fr)' :
-                                remoteStreams.size === 2 ? 'repeat(2, 1fr)' :
-                                'repeat(3, 1fr)',
-            gap: '12px',
-            alignContent: 'start'
-          }}>
-            <div style={{
-              position: 'relative',
-              backgroundColor: 'rgba(26, 28, 32, 0.95)',
-              borderRadius: '12px',
-              overflow: 'hidden',
-              aspectRatio: '16/9',
-              maxHeight: '280px',
-              border: '2px solid rgba(59, 130, 246, 0.3)'
-            }}>
-              <video
-                ref={localVideoRef}
-                autoPlay
-                muted
-                playsInline
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  transform: 'scaleX(-1)'
-                }}
-              />
-              <div style={{
-                position: 'absolute',
-                bottom: '12px',
-                left: '12px',
-                padding: '6px 12px',
-                backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: 'white',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <span>{currentUser.username} (You)</span>
-                {isMuted && <MicOff size={14} color="#ef4444" />}
-                {isVideoOff && <VideoOff size={14} color="#ef4444" />}
-              </div>
-            </div>
-
-            {Array.from(remoteStreams.entries()).map(([userId, data]) => (
-              <div
-                key={userId}
-                style={{
-                  position: 'relative',
-                  backgroundColor: 'rgba(26, 28, 32, 0.95)',
-                  borderRadius: '12px',
-                  overflow: 'hidden',
-                  aspectRatio: '16/9',
-                  maxHeight: '280px',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                }}
-              >
-                <video
-                  ref={el => remoteVideosRef.current[userId] = el}
-                  autoPlay
-                  playsInline
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover'
-                  }}
-                />
-                <div style={{
-                  position: 'absolute',
-                  bottom: '12px',
-                  left: '12px',
-                  padding: '6px 12px',
-                  backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  color: 'white'
-                }}>
-                  {data.username}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Main Content - Video Grid */}
+      <div style={styles.mainContent}>
+        <VideoGrid
+          localVideoRef={localVideoRef}
+          localStream={localStream}
+          screenStream={screenStream}
+          remoteStreams={remoteStreams}
+          currentUser={currentUser}
+          isScreenSharing={isScreenSharing}
+          screenSharingUserId={screenSharingUserId}
+          isVideoOff={isVideoOff}
+          isMuted={isMuted}
+          peerStates={peerStates}
+        />
       </div>
 
-      <div style={{
-        padding: '20px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '20px'
-      }}>
-        <button onClick={toggleMute} style={{ padding: '0', border: 'none', cursor: 'pointer', backgroundColor: 'transparent', color: isMuted ? '#ef4444' : '#3b82f6', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={isMuted ? 'Unmute' : 'Mute'}>
-          {isMuted ? <MicOff size={28} /> : <Mic size={28} />}
-        </button>
-
-        <button onClick={toggleVideo} style={{ padding: '0', border: 'none', cursor: 'pointer', backgroundColor: 'transparent', color: isVideoOff ? '#ef4444' : '#3b82f6', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}>
-          {isVideoOff ? <VideoOff size={28} /> : <Video size={28} />}
-        </button>
-
-        <button onClick={toggleScreenShare} style={{ padding: '0', border: 'none', cursor: 'pointer', backgroundColor: 'transparent', color: isScreenSharing ? '#10b981' : '#3b82f6', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={isScreenSharing ? 'Stop sharing' : 'Share screen'}>
-          {isScreenSharing ? <MonitorOff size={28} /> : <Monitor size={28} />}
-        </button>
-
-        <VideoCallChat socket={socket} roomId={roomId} projectId={projectId} currentUser={currentUser} participants={participants} />
-
-        <button onClick={toggleFullScreen} style={{ padding: '0', border: 'none', cursor: 'pointer', backgroundColor: 'transparent', color: '#3b82f6', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={isFullScreen ? 'Exit fullscreen' : 'Fullscreen'}>
-          {isFullScreen ? <Minimize2 size={28} /> : <Maximize2 size={28} />}
-        </button>
-
-        <div style={{ width: '2px', height: '30px', backgroundColor: 'rgba(255, 255, 255, 0.15)', margin: '0 8px' }} />
-
-        <button onClick={handleEndCall} style={{ padding: '12px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', backgroundColor: '#ef4444', color: 'white', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600', fontSize: '14px', transition: 'all 0.2s ease' }} title="End call">
-          <PhoneOff size={18} />
-          End Call
-        </button>
+      {/* Control Bar */}
+      <div style={styles.controlBar}>
+        <VideoControls
+          isMuted={isMuted}
+          isVideoOff={isVideoOff}
+          isScreenSharing={isScreenSharing}
+          isFullScreen={isFullScreen}
+          onToggleMute={handleToggleMute}
+          onToggleVideo={handleToggleVideo}
+          onToggleScreenShare={handleToggleScreenShare}
+          onToggleFullScreen={handleToggleFullScreen}
+          onEndCall={handleEndCall}
+        />
+        
+        <VideoCallChat 
+          socket={socket} 
+          roomId={roomId} 
+          projectId={projectId} 
+          currentUser={currentUser} 
+          participants={participants} 
+        />
       </div>
     </div>
   );
