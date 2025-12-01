@@ -260,8 +260,8 @@ function Onboarding() {
       lineHeight: '1.2'
     },
     stepSubtitle: {
-      fontSize: '1rem',
-      color: '#9ca3af',
+      fontSize: '2rem',
+      color: '#ff0000ff',
       marginBottom: '2rem'
     },
     buttonGrid: {
