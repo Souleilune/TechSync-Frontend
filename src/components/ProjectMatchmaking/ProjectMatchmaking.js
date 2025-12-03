@@ -1,8 +1,9 @@
 // frontend/src/components/ProjectMatchmaking/ProjectMatchmaking.js
-// MOBA-Style Project Matchmaking Feature
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import SkillMatchingAPI from '../../services/skillMatchingAPI';
+import MatchmakingModal from './MatchmakingModal';
 import { 
   Search, 
   Target, 
@@ -15,7 +16,10 @@ import {
   Code,
   Sparkles,
   RefreshCw,
-  CheckCircle
+  CheckCircle,
+  Shield,
+  Cpu,
+  Radio
 } from 'lucide-react';
 
 const ProjectMatchmaking = ({ onProjectSelect }) => {
@@ -24,6 +28,7 @@ const ProjectMatchmaking = ({ onProjectSelect }) => {
   const [matchedProjects, setMatchedProjects] = useState([]);
   const [searchProgress, setSearchProgress] = useState(0);
   const [cooldownTime, setCooldownTime] = useState(0);
+  const [showMatchModal, setShowMatchModal] = useState(false);
 
   // Cooldown timer
   useEffect(() => {
@@ -58,7 +63,6 @@ const ProjectMatchmaking = ({ onProjectSelect }) => {
     setMatchedProjects([]);
 
     try {
-      // Simulate realistic search time
       await new Promise(resolve => setTimeout(resolve, 2500));
 
       const response = await SkillMatchingAPI.getEnhancedRecommendations(user.id, {
@@ -70,9 +74,12 @@ const ProjectMatchmaking = ({ onProjectSelect }) => {
       
       setMatchedProjects(projects);
       setMatchState('found');
-      
-      // Start 30-second cooldown
       setCooldownTime(30);
+      
+      // Show the modal when matches are found
+      if (projects.length > 0) {
+        setShowMatchModal(true);
+      }
       
     } catch (error) {
       console.error('Matchmaking error:', error);
@@ -88,105 +95,260 @@ const ProjectMatchmaking = ({ onProjectSelect }) => {
   };
 
   const handleProjectClick = (project) => {
+    setShowMatchModal(false);
     if (onProjectSelect) {
       onProjectSelect(project);
     }
   };
 
+  const handleViewAllMatches = () => {
+    setShowMatchModal(false);
+  };
+
   const renderIdleState = () => (
-  <div style={styles.idleContainer}>
-    <div style={styles.heroSection}>
-      {/* MOVED: Icon and Title Group - More Compact */}
-      <div style={styles.titleGroup}>
-        <div style={styles.iconCircle}>
-          <Target size={40} style={{ color: '#3b82f6' }} />
-        </div>
-        <h2 style={styles.heroTitle}>Project Matchmaking</h2>
-        <p style={styles.heroSubtitle}>
-          Find perfect team projects matched to your skills
-        </p>
-      </div>
+    <div style={styles.idleContainer}>
+      {/* Grid Overlay */}
+      <div style={styles.gridOverlay} />
+      
+      {/* Corner Accents */}
+      <svg style={{...styles.cornerAccent, top: 0, left: 0}} viewBox="0 0 100 100">
+        <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+        <circle cx="0" cy="0" r="4" fill="#3b82f6" opacity="0.6"/>
+      </svg>
+      <svg style={{...styles.cornerAccent, top: 0, right: 0, transform: 'scaleX(-1)'}} viewBox="0 0 100 100">
+        <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+        <circle cx="0" cy="0" r="4" fill="#3b82f6" opacity="0.6"/>
+      </svg>
+      <svg style={{...styles.cornerAccent, bottom: 0, left: 0, transform: 'scaleY(-1)'}} viewBox="0 0 100 100">
+        <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+        <circle cx="0" cy="0" r="4" fill="#3b82f6" opacity="0.6"/>
+      </svg>
+      <svg style={{...styles.cornerAccent, bottom: 0, right: 0, transform: 'scale(-1)'}} viewBox="0 0 100 100">
+        <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+        <circle cx="0" cy="0" r="4" fill="#3b82f6" opacity="0.6"/>
+      </svg>
 
-      {/* MOVED UP: Start Button - Now Prominent */}
-      <button 
-        style={styles.startButton}
-        onClick={startMatchmaking}
-        onMouseEnter={(e) => {
-          e.target.style.transform = 'scale(1.05)';
-          e.target.style.boxShadow = '0 8px 30px rgba(59, 130, 246, 0.5)';
-        }}
-        onMouseLeave={(e) => {
-          e.target.style.transform = 'scale(1)';
-          e.target.style.boxShadow = '0 4px 20px rgba(59, 130, 246, 0.3)';
-        }}
-      >
-        <Search size={22} />
-        Start Matchmaking
-      </button>
+      <div style={styles.heroSection}>
+        {/* Hexagon Badge */}
+        <div style={styles.hexagonContainer}>
+          <div style={styles.hexagonBadge}>
+            <svg style={styles.hexagonSvg} viewBox="0 0 100 115">
+              <defs>
+                <linearGradient id="hexGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.8"/>
+                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.8"/>
+                </linearGradient>
+                <filter id="hexGlow">
+                  <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+                  <feMerge>
+                    <feMergeNode in="coloredBlur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
+              </defs>
+              <polygon 
+                points="50,2 95,28 95,87 50,113 5,87 5,28" 
+                fill="rgba(15, 23, 42, 0.9)"
+                stroke="url(#hexGradient)"
+                strokeWidth="2"
+                filter="url(#hexGlow)"
+              />
+            </svg>
+            <div style={styles.hexagonContent}>
+              <Target size={44} color="#3b82f6" />
+            </div>
+          </div>
+          
+          {/* Orbiting dots */}
+          <div style={styles.orbitRing}>
+            <div style={{...styles.orbitDot, animationDelay: '0s'}} />
+            <div style={{...styles.orbitDot, animationDelay: '1s'}} />
+            <div style={{...styles.orbitDot, animationDelay: '2s'}} />
+          </div>
+        </div>
 
-      {/* Features Grid - Now Below Button */}
-      <div style={styles.featureGrid}>
-        <div style={styles.featureCard}>
-          <TrendingUp size={20} style={{ color: '#3b82f6' }} />
-          <h4 style={styles.featureTitle}>Smart Matching</h4>
-          <p style={styles.featureText}>AI-powered recommendations</p>
+        {/* Title Section */}
+        <div style={styles.titleSection}>
+          <span style={styles.statusBadge}>
+            <Radio size={12} />
+            SYSTEM READY
+          </span>
+          <h2 style={styles.heroTitle}>Project Matchmaking</h2>
+          <p style={styles.heroSubtitle}>
+            Advanced AI-powered project discovery system
+          </p>
         </div>
-        <div style={styles.featureCard}>
-          <Sparkles size={20} style={{ color: '#8b5cf6' }} />
-          <h4 style={styles.featureTitle}>Perfect Fit</h4>
-          <p style={styles.featureText}>Tailored to your level</p>
+
+        {/* Start Button */}
+        <button 
+          style={styles.startButton}
+          onClick={startMatchmaking}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)';
+            e.currentTarget.style.boxShadow = '0 15px 40px rgba(59, 130, 246, 0.5), 0 0 60px rgba(59, 130, 246, 0.2)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0) scale(1)';
+            e.currentTarget.style.boxShadow = '0 8px 30px rgba(59, 130, 246, 0.3), 0 0 40px rgba(59, 130, 246, 0.1)';
+          }}
+        >
+          <div style={styles.buttonGlow} />
+          <Search size={22} />
+          <span>Initialize Search</span>
+          <div style={styles.buttonArrow}>
+            <Zap size={18} />
+          </div>
+        </button>
+
+        {/* Stats Bar */}
+        <div style={styles.statsBar}>
+          <div style={styles.statItem}>
+            <span style={styles.statNumber}>100+</span>
+            <span style={styles.statLabel}>Projects</span>
+          </div>
+          <div style={styles.statDivider} />
+          <div style={styles.statItem}>
+            <span style={styles.statNumber}>78%</span>
+            <span style={styles.statLabel}>Match Rate</span>
+          </div>
+          <div style={styles.statDivider} />
+          <div style={styles.statItem}>
+            <span style={styles.statNumber}>2.5s</span>
+            <span style={styles.statLabel}>Avg Time</span>
+          </div>
         </div>
-        <div style={styles.featureCard}>
-          <Users size={20} style={{ color: '#10b981' }} />
-          <h4 style={styles.featureTitle}>Active Teams</h4>
-          <p style={styles.featureText}>Engaged collaborators</p>
+
+        {/* Features Grid */}
+        <div style={styles.featureGrid}>
+          <div style={styles.featureCard}>
+            <div style={styles.featureIcon}>
+              <Cpu size={22} style={{ color: '#3b82f6' }} />
+            </div>
+            <h4 style={styles.featureTitle}>Neural Matching</h4>
+            <p style={styles.featureText}>AI analyzes your skill profile</p>
+          </div>
+          <div style={styles.featureCard}>
+            <div style={styles.featureIcon}>
+              <Shield size={22} style={{ color: '#8b5cf6' }} />
+            </div>
+            <h4 style={styles.featureTitle}>Skill Calibration</h4>
+            <p style={styles.featureText}>Matched to your experience</p>
+          </div>
+          <div style={styles.featureCard}>
+            <div style={styles.featureIcon}>
+              <Users size={22} style={{ color: '#10b981' }} />
+            </div>
+            <h4 style={styles.featureTitle}>Team Sync</h4>
+            <p style={styles.featureText}>Find active collaborators</p>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
 
   const renderSearchingState = () => (
     <div style={styles.searchingContainer}>
-      <div style={styles.searchAnimation}>
-        <div style={styles.pulseRing}></div>
-        <div style={{...styles.pulseRing, animationDelay: '0.5s'}}></div>
-        <div style={styles.searchIcon}>
-          <Target size={48} style={{ color: '#3b82f6' }} />
-        </div>
-      </div>
+      {/* Grid Overlay */}
+      <div style={styles.gridOverlay} />
+      
+      {/* Scan Line */}
+      <div style={styles.scanLine} />
+      
+      {/* Corner Accents */}
+      <svg style={{...styles.cornerAccent, top: 0, left: 0}} viewBox="0 0 100 100">
+        <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+      </svg>
+      <svg style={{...styles.cornerAccent, top: 0, right: 0, transform: 'scaleX(-1)'}} viewBox="0 0 100 100">
+        <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+      </svg>
+      <svg style={{...styles.cornerAccent, bottom: 0, left: 0, transform: 'scaleY(-1)'}} viewBox="0 0 100 100">
+        <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+      </svg>
+      <svg style={{...styles.cornerAccent, bottom: 0, right: 0, transform: 'scale(-1)'}} viewBox="0 0 100 100">
+        <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+      </svg>
 
-      <h2 style={styles.searchingTitle}>Finding Your Perfect Matches</h2>
-      <p style={styles.searchingText}>Analyzing your skills and preferences...</p>
+      <div style={styles.searchContent}>
+        {/* Radar Animation */}
+        <div style={styles.radarContainer}>
+          <div style={styles.radarRing} />
+          <div style={styles.radarRing2} />
+          <div style={styles.radarSweep} />
+          <div style={styles.radarCenter}>
+            <Target size={40} style={{ color: '#3b82f6' }} />
+          </div>
+        </div>
 
-      <div style={styles.progressBarContainer}>
-        <div style={styles.progressBar}>
-          <div 
-            style={{
-              ...styles.progressFill,
-              width: `${searchProgress}%`
-            }}
-          />
+        <div style={styles.searchTextContainer}>
+          <span style={styles.searchingBadge}>
+            <div style={styles.pulseDot} />
+            SCANNING
+          </span>
+          <h2 style={styles.searchingTitle}>Analyzing Projects</h2>
+          <p style={styles.searchingText}>Cross-referencing your skill matrix...</p>
         </div>
-        <span style={styles.progressText}>{searchProgress}%</span>
-      </div>
 
-      <div style={styles.searchSteps}>
-        <div style={styles.step}>
-          <CheckCircle size={16} style={{ color: '#10b981' }} />
-          <span>Scanning available projects</span>
+        {/* Progress Bar */}
+        <div style={styles.progressContainer}>
+          <div style={styles.progressHeader}>
+            <span style={styles.progressLabel}>MATCH PROGRESS</span>
+            <span style={styles.progressPercent}>{searchProgress}%</span>
+          </div>
+          <div style={styles.progressBar}>
+            <div 
+              style={{
+                ...styles.progressFill,
+                width: `${searchProgress}%`
+              }}
+            />
+            <div style={styles.progressGlow} />
+          </div>
         </div>
-        <div style={styles.step}>
-          <CheckCircle size={16} style={{ color: '#10b981' }} />
-          <span>Calculating compatibility</span>
-        </div>
-        <div style={styles.step}>
-          {searchProgress < 90 ? (
-            <Clock size={16} style={{ color: '#6b7280' }} />
-          ) : (
-            <CheckCircle size={16} style={{ color: '#10b981' }} />
-          )}
-          <span>Ranking best matches</span>
+
+        {/* Search Steps */}
+        <div style={styles.searchSteps}>
+          <div style={{...styles.step, opacity: searchProgress > 0 ? 1 : 0.4}}>
+            <div style={{
+              ...styles.stepIcon,
+              backgroundColor: searchProgress > 20 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+              borderColor: searchProgress > 20 ? '#10b981' : 'rgba(255, 255, 255, 0.1)'
+            }}>
+              {searchProgress > 20 ? (
+                <CheckCircle size={14} style={{ color: '#10b981' }} />
+              ) : (
+                <Clock size={14} style={{ color: '#6b7280' }} />
+              )}
+            </div>
+            <span>Scanning project database</span>
+          </div>
+          <div style={{...styles.step, opacity: searchProgress > 30 ? 1 : 0.4}}>
+            <div style={{
+              ...styles.stepIcon,
+              backgroundColor: searchProgress > 60 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+              borderColor: searchProgress > 60 ? '#10b981' : 'rgba(255, 255, 255, 0.1)'
+            }}>
+              {searchProgress > 60 ? (
+                <CheckCircle size={14} style={{ color: '#10b981' }} />
+              ) : (
+                <Clock size={14} style={{ color: '#6b7280' }} />
+              )}
+            </div>
+            <span>Calculating compatibility scores</span>
+          </div>
+          <div style={{...styles.step, opacity: searchProgress > 70 ? 1 : 0.4}}>
+            <div style={{
+              ...styles.stepIcon,
+              backgroundColor: searchProgress >= 100 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+              borderColor: searchProgress >= 100 ? '#10b981' : 'rgba(255, 255, 255, 0.1)'
+            }}>
+              {searchProgress >= 100 ? (
+                <CheckCircle size={14} style={{ color: '#10b981' }} />
+              ) : (
+                <Clock size={14} style={{ color: '#6b7280' }} />
+              )}
+            </div>
+            <span>Ranking optimal matches</span>
+          </div>
         </div>
       </div>
     </div>
@@ -214,11 +376,13 @@ const ProjectMatchmaking = ({ onProjectSelect }) => {
           disabled={cooldownTime > 0}
           onMouseEnter={(e) => {
             if (cooldownTime === 0) {
-              e.target.style.backgroundColor = '#2563eb';
+              e.currentTarget.style.backgroundColor = '#2563eb';
+              e.currentTarget.style.transform = 'translateY(-2px)';
             }
           }}
           onMouseLeave={(e) => {
-            e.target.style.backgroundColor = '#3b82f6';
+            e.currentTarget.style.backgroundColor = '#3b82f6';
+            e.currentTarget.style.transform = 'translateY(0)';
           }}
         >
           <RefreshCw size={16} />
@@ -325,142 +489,466 @@ const ProjectMatchmaking = ({ onProjectSelect }) => {
 
   return (
     <div style={styles.container}>
+      <style>{keyframes}</style>
+      
       {matchState === 'idle' && renderIdleState()}
       {matchState === 'searching' && renderSearchingState()}
       {(matchState === 'found' || matchState === 'cooldown') && renderFoundState()}
+      
+      {/* Match Found Modal */}
+      <MatchmakingModal
+        isOpen={showMatchModal}
+        onClose={() => setShowMatchModal(false)}
+        matchedProjects={matchedProjects}
+        onViewAllMatches={handleViewAllMatches}
+        onProjectSelect={handleProjectClick}
+      />
     </div>
   );
 };
 
+const keyframes = `
+  @keyframes pulse {
+    0% {
+      transform: scale(0.8);
+      opacity: 0;
+    }
+    50% {
+      opacity: 0.5;
+    }
+    100% {
+      transform: scale(1.4);
+      opacity: 0;
+    }
+  }
+  
+  @keyframes hexPulse {
+    0%, 100% { 
+      filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.4));
+    }
+    50% { 
+      filter: drop-shadow(0 0 35px rgba(59, 130, 246, 0.7));
+    }
+  }
+  
+  @keyframes orbit {
+    0% { transform: rotate(0deg) translateX(70px) rotate(0deg); }
+    100% { transform: rotate(360deg) translateX(70px) rotate(-360deg); }
+  }
+  
+  @keyframes scanLine {
+    0% { transform: translateY(-100%); opacity: 0; }
+    50% { opacity: 1; }
+    100% { transform: translateY(100%); opacity: 0; }
+  }
+  
+  @keyframes radarSweep {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  @keyframes radarPulse {
+    0% { transform: scale(0.8); opacity: 0.8; }
+    100% { transform: scale(1.5); opacity: 0; }
+  }
+  
+  @keyframes pulseDot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+  
+  @keyframes borderGlow {
+    0%, 100% { 
+      box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.1), 
+                  0 0 20px rgba(59, 130, 246, 0.2);
+    }
+    50% { 
+      box-shadow: inset 0 0 30px rgba(59, 130, 246, 0.2), 
+                  0 0 40px rgba(59, 130, 246, 0.3);
+    }
+  }
+  
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+`;
+
 const styles = {
   container: {
     width: '100%',
-    minHeight: '600px'
+    minHeight: '600px',
+    position: 'relative'
   },
   
-  // IDLE STATE STYLES
-  // IDLE STATE STYLES - OPTIMIZED
-idleContainer: {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  padding: '40px 20px',  // Reduced from 60px
-  minHeight: '500px'
-},
-heroSection: {
-  textAlign: 'center',
-  maxWidth: '700px',
-  width: '100%'
-},
-titleGroup: {
-  marginBottom: '32px'  // Compact spacing
-},
-iconCircle: {
-  width: '80px',  // Reduced from 100px
-  height: '80px',
-  borderRadius: '50%',
-  backgroundColor: 'rgba(59, 130, 246, 0.15)',
-  border: '2px solid rgba(59, 130, 246, 0.4)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  margin: '0 auto 20px',
-  animation: 'pulse-glow 2s ease-in-out infinite'
-},
-heroTitle: {
-  fontSize: '32px',  // Slightly reduced
-  fontWeight: 'bold',
-  color: 'white',
-  marginBottom: '8px'
-},
-heroSubtitle: {
-  fontSize: '16px',
-  color: '#9ca3af',
-  marginBottom: '0'
-},
-featureGrid: {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',  // Slightly smaller
-  gap: '16px',
-  marginTop: '32px',  // Added space above features
-  width: '100%'
-},
-featureCard: {
-  padding: '20px',  // Reduced from 24px
-  backgroundColor: 'rgba(26, 28, 32, 0.4)',
-  borderRadius: '12px',
-  border: '1px solid rgba(255, 255, 255, 0.08)',
-  textAlign: 'center',
-  transition: 'all 0.3s ease'
-},
-featureTitle: {
-  fontSize: '14px',
-  fontWeight: '600',
-  color: 'white',
-  margin: '10px 0 6px'
-},
-featureText: {
-  fontSize: '12px',
-  color: '#9ca3af',
-  margin: 0,
-  lineHeight: '1.4'
-},
-startButton: {
-  padding: '18px 56px',  // Bigger button
-  fontSize: '20px',      // Bigger text
-  fontWeight: '700',     // Bolder
-  color: 'white',
-  backgroundColor: '#3b82f6',
-  border: 'none',
-  borderRadius: '16px',  // More rounded
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '12px',
-  boxShadow: '0 4px 20px rgba(59, 130, 246, 0.3), 0 0 40px rgba(59, 130, 246, 0.1)',
-  transition: 'all 0.3s ease',
-  margin: '0 auto',
-  position: 'relative',
-  overflow: 'hidden'
-},
-
-  // SEARCHING STATE STYLES
-  searchingContainer: {
+  // ============ SHARED STYLES ============
+  gridOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundImage: `
+      linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px)
+    `,
+    backgroundSize: '40px 40px',
+    pointerEvents: 'none',
+    borderRadius: '16px'
+  },
+  cornerAccent: {
+    position: 'absolute',
+    width: '80px',
+    height: '80px',
+    pointerEvents: 'none',
+    zIndex: 1
+  },
+  
+  // ============ IDLE STATE STYLES ============
+  idleContainer: {
+    position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    padding: '80px 20px',
-    textAlign: 'center'
+    padding: '50px 30px',
+    minHeight: '550px',
+    background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.6) 0%, rgba(7, 11, 20, 0.8) 100%)',
+    borderRadius: '20px',
+    border: '1px solid rgba(59, 130, 246, 0.15)',
+    overflow: 'hidden'
   },
-  searchAnimation: {
+  heroSection: {
     position: 'relative',
-    width: '120px',
-    height: '120px',
-    marginBottom: '32px'
+    zIndex: 2,
+    textAlign: 'center',
+    maxWidth: '700px',
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center'
   },
-  pulseRing: {
+  hexagonContainer: {
+    position: 'relative',
+    width: '140px',
+    height: '140px',
+    marginBottom: '24px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  hexagonBadge: {
+    position: 'relative',
+    width: '100px',
+    height: '115px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    animation: 'hexPulse 3s ease-in-out infinite'
+  },
+  hexagonSvg: {
     position: 'absolute',
     top: 0,
     left: 0,
     width: '100%',
-    height: '100%',
-    borderRadius: '50%',
-    border: '3px solid #3b82f6',
-    animation: 'pulse 2s infinite',
-    opacity: 0
+    height: '100%'
   },
-  searchIcon: {
+  hexagonContent: {
+    position: 'relative',
+    zIndex: 2,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  orbitRing: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: '140px',
+    height: '140px',
+    transform: 'translate(-50%, -50%)',
+    borderRadius: '50%',
+    border: '1px dashed rgba(59, 130, 246, 0.2)',
+    pointerEvents: 'none'
+  },
+  orbitDot: {
+    position: 'absolute',
+    width: '8px',
+    height: '8px',
+    backgroundColor: '#3b82f6',
+    borderRadius: '50%',
+    top: '50%',
+    left: '50%',
+    marginTop: '-4px',
+    marginLeft: '-4px',
+    animation: 'orbit 8s linear infinite',
+    boxShadow: '0 0 10px #3b82f6'
+  },
+  titleSection: {
+    marginBottom: '28px'
+  },
+  statusBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 14px',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    border: '1px solid rgba(16, 185, 129, 0.3)',
+    borderRadius: '20px',
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#10b981',
+    textTransform: 'uppercase',
+    letterSpacing: '1px',
+    marginBottom: '16px'
+  },
+  heroTitle: {
+    fontSize: '36px',
+    fontWeight: '800',
+    color: 'white',
+    marginBottom: '10px',
+    letterSpacing: '-0.5px',
+    background: 'linear-gradient(135deg, #ffffff 0%, #94a3b8 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text'
+  },
+  heroSubtitle: {
+    fontSize: '16px',
+    color: '#64748b',
+    margin: 0,
+    letterSpacing: '0.5px'
+  },
+  startButton: {
+    position: 'relative',
+    padding: '18px 48px',
+    fontSize: '16px',
+    fontWeight: '700',
+    color: 'white',
+    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+    border: 'none',
+    borderRadius: '14px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    boxShadow: '0 8px 30px rgba(59, 130, 246, 0.3), 0 0 40px rgba(59, 130, 246, 0.1)',
+    transition: 'all 0.3s ease',
+    marginBottom: '32px',
+    textTransform: 'uppercase',
+    letterSpacing: '1px',
+    overflow: 'hidden'
+  },
+  buttonGlow: {
+    position: 'absolute',
+    top: 0,
+    left: '-100%',
+    width: '100%',
+    height: '100%',
+    background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent)',
+    animation: 'shimmer 3s ease-in-out infinite'
+  },
+  buttonArrow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '32px',
+    height: '32px',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: '8px',
+    marginLeft: '8px'
+  },
+  statsBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '24px',
+    padding: '16px 32px',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderRadius: '12px',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    marginBottom: '32px',
+    animation: 'borderGlow 4s ease-in-out infinite'
+  },
+  statItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '2px'
+  },
+  statNumber: {
+    fontSize: '22px',
+    fontWeight: '700',
+    color: '#3b82f6',
+    fontFamily: 'monospace'
+  },
+  statLabel: {
+    fontSize: '11px',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px'
+  },
+  statDivider: {
+    width: '1px',
+    height: '30px',
+    background: 'linear-gradient(180deg, transparent, rgba(59, 130, 246, 0.3), transparent)'
+  },
+  featureGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '16px',
+    width: '100%',
+    maxWidth: '600px'
+  },
+  featureCard: {
+    padding: '20px 16px',
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    borderRadius: '12px',
+    border: '1px solid rgba(255, 255, 255, 0.06)',
+    textAlign: 'center',
+    transition: 'all 0.3s ease'
+  },
+  featureIcon: {
+    width: '44px',
+    height: '44px',
+    margin: '0 auto 12px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    borderRadius: '10px',
+    border: '1px solid rgba(59, 130, 246, 0.2)'
+  },
+  featureTitle: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: 'white',
+    margin: '0 0 6px 0'
+  },
+  featureText: {
+    fontSize: '12px',
+    color: '#64748b',
+    margin: 0,
+    lineHeight: '1.4'
+  },
+
+  // ============ SEARCHING STATE STYLES ============
+  searchingContainer: {
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '60px 30px',
+    minHeight: '550px',
+    background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.6) 0%, rgba(7, 11, 20, 0.8) 100%)',
+    borderRadius: '20px',
+    border: '1px solid rgba(59, 130, 246, 0.15)',
+    overflow: 'hidden'
+  },
+  scanLine: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '3px',
+    background: 'linear-gradient(90deg, transparent, #3b82f6, #8b5cf6, transparent)',
+    animation: 'scanLine 2s ease-in-out infinite',
+    boxShadow: '0 0 20px #3b82f6, 0 0 40px #3b82f6'
+  },
+  searchContent: {
+    position: 'relative',
+    zIndex: 2,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: '400px'
+  },
+  radarContainer: {
+    position: 'relative',
+    width: '150px',
+    height: '150px',
+    marginBottom: '32px'
+  },
+  radarRing: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: '100%',
+    height: '100%',
+    marginTop: '-75px',
+    marginLeft: '-75px',
+    borderRadius: '50%',
+    border: '2px solid rgba(59, 130, 246, 0.3)',
+    animation: 'radarPulse 2s ease-out infinite'
+  },
+  radarRing2: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: '100%',
+    height: '100%',
+    marginTop: '-75px',
+    marginLeft: '-75px',
+    borderRadius: '50%',
+    border: '2px solid rgba(59, 130, 246, 0.3)',
+    animation: 'radarPulse 2s ease-out infinite',
+    animationDelay: '1s'
+  },
+  radarSweep: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: '50%',
+    height: '2px',
+    background: 'linear-gradient(90deg, #3b82f6, transparent)',
+    transformOrigin: 'left center',
+    animation: 'radarSweep 2s linear infinite',
+    boxShadow: '0 0 15px #3b82f6'
+  },
+  radarCenter: {
     position: 'absolute',
     top: '50%',
     left: '50%',
     transform: 'translate(-50%, -50%)',
-    width: '80px',
-    height: '80px',
+    width: '70px',
+    height: '70px',
+    backgroundColor: 'rgba(15, 23, 42, 0.9)',
     borderRadius: '50%',
-    backgroundColor: 'rgba(59, 130, 246, 0.2)',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    border: '2px solid rgba(59, 130, 246, 0.5)'
+  },
+  searchTextContainer: {
+    textAlign: 'center',
+    marginBottom: '28px'
+  },
+  searchingBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '6px 16px',
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+    border: '1px solid rgba(59, 130, 246, 0.3)',
+    borderRadius: '20px',
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#3b82f6',
+    textTransform: 'uppercase',
+    letterSpacing: '2px',
+    marginBottom: '16px'
+  },
+  pulseDot: {
+    width: '8px',
+    height: '8px',
+    backgroundColor: '#3b82f6',
+    borderRadius: '50%',
+    animation: 'pulseDot 1s ease-in-out infinite'
   },
   searchingTitle: {
     fontSize: '28px',
@@ -469,50 +957,82 @@ startButton: {
     marginBottom: '8px'
   },
   searchingText: {
-    fontSize: '16px',
-    color: '#9ca3af',
-    marginBottom: '32px'
+    fontSize: '15px',
+    color: '#64748b',
+    margin: 0
   },
-  progressBarContainer: {
+  progressContainer: {
     width: '100%',
-    maxWidth: '400px',
-    marginBottom: '32px'
+    marginBottom: '28px'
+  },
+  progressHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '10px'
+  },
+  progressLabel: {
+    fontSize: '11px',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: '1px'
+  },
+  progressPercent: {
+    fontSize: '14px',
+    fontWeight: '700',
+    color: '#3b82f6',
+    fontFamily: 'monospace'
   },
   progressBar: {
+    position: 'relative',
     width: '100%',
     height: '8px',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: '4px',
-    overflow: 'hidden',
-    marginBottom: '8px'
+    overflow: 'hidden'
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#3b82f6',
+    background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
     transition: 'width 0.3s ease',
-    borderRadius: '4px'
+    borderRadius: '4px',
+    position: 'relative'
   },
-  progressText: {
-    fontSize: '14px',
-    color: '#9ca3af',
-    fontWeight: '600'
+  progressGlow: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: '50px',
+    height: '100%',
+    background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3))',
+    animation: 'shimmer 1s ease-in-out infinite'
   },
   searchSteps: {
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
-    alignItems: 'flex-start',
-    maxWidth: '300px'
+    width: '100%'
   },
   step: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '12px',
     fontSize: '14px',
-    color: '#d1d5db'
+    color: '#94a3b8',
+    transition: 'opacity 0.3s ease'
+  },
+  stepIcon: {
+    width: '28px',
+    height: '28px',
+    borderRadius: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '1px solid',
+    transition: 'all 0.3s ease'
   },
 
-  // RESULTS STATE STYLES
+  // ============ RESULTS STATE STYLES ============
   resultsContainer: {
     padding: '20px'
   },
@@ -539,18 +1059,19 @@ startButton: {
     margin: 0
   },
   searchAgainButton: {
-    padding: '10px 20px',
+    padding: '12px 24px',
     fontSize: '14px',
     fontWeight: '600',
     color: 'white',
     backgroundColor: '#3b82f6',
     border: 'none',
-    borderRadius: '8px',
+    borderRadius: '10px',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    transition: 'all 0.2s ease'
+    transition: 'all 0.3s ease',
+    boxShadow: '0 4px 15px rgba(59, 130, 246, 0.3)'
   },
   projectGrid: {
     display: 'grid',
@@ -564,7 +1085,8 @@ startButton: {
     border: '1px solid rgba(255, 255, 255, 0.1)',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    position: 'relative'
+    position: 'relative',
+    boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)'
   },
   matchBadge: {
     position: 'absolute',
@@ -670,24 +1192,5 @@ startButton: {
     transition: 'all 0.2s ease'
   }
 };
-
-// Add animation keyframes
-const styleSheet = document.createElement("style");
-styleSheet.textContent = `
-  @keyframes pulse {
-    0% {
-      transform: scale(0.8);
-      opacity: 0;
-    }
-    50% {
-      opacity: 0.5;
-    }
-    100% {
-      transform: scale(1.4);
-      opacity: 0;
-    }
-  }
-`;
-document.head.appendChild(styleSheet);
 
 export default ProjectMatchmaking;

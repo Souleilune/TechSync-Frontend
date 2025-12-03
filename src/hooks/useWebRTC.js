@@ -649,7 +649,7 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
       const screenTrack = screenStream.getVideoTracks()[0];
       screenStreamRef.current = screenStream;
       
-      // ✅ Use replaceTrack - doesn't require renegotiation
+      // ✅ Use replaceTrack - doesn't require renegotiation  
       const replacePromises = [];
       peerConnections.current.forEach((pc, visitorId) => {
         const sender = pc.getSenders().find(s => s.track?.kind === 'video');
