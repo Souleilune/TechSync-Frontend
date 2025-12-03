@@ -241,7 +241,7 @@ const ProjectChallengeInterface = ({ projectId, onClose, onSuccess }) => {
       ...data.data,
       passed: false,
       score: 0,
-      feedback: '❌ Challenge automatically failed due to excessive tab switching. This is considered a violation of challenge integrity rules.',
+      feedback: 'Challenge automatically failed due to excessive tab switching. This is considered a violation of challenge integrity rules.',
       tabViolation: true
     };
     
@@ -1588,7 +1588,7 @@ const handleCut = (e) => {
               }}>
                 <div style={styles.resultHeader}>
                   <span style={styles.resultTitle}>
-                    {result.passed ? '🎉 Challenge Passed!' : '❌ Challenge Not Passed'}
+                    {result.passed ? '🎉 Challenge Passed!' : 'Challenge Not Passed'}
                   </span>
                   <span style={styles.resultScore}>
                     {result.score}%
@@ -1602,7 +1602,7 @@ const handleCut = (e) => {
                 {result.projectJoined && (
                   <div style={styles.joinedNotice}>
                     <p style={styles.joinedText}>
-                      🎉 Congratulations! You have been added to the project as a member.
+                      Congratulations! You have been added to the project as a member.
                       You can now access the project workspace and collaborate with the team.
                     </p>
                   </div>
@@ -1666,7 +1666,7 @@ const handleCut = (e) => {
                         e.target.style.boxShadow = '0 4px 16px rgba(16, 185, 129, 0.3)';
                       }}
                     >
-                      🔄 Try Again
+                      Try Again
                     </button>
                   </div>
                 )}
