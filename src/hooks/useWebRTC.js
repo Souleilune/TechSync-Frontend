@@ -284,7 +284,7 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
 
   const createPeerConnection = useCallback((peerId, peerUsername, forceNew = false) => {
     // Check if we need to recreate due to m-line error
-    const existingState = (negotiationState.current.get, visitorId) || {};
+  const existingState = negotiationState.current.get(peerId) || {};
     
     if (peerConnections.current.has(peerId) && !forceNew && !existingState.needsRecreation) {
       console.log(`♻️ [WebRTC] Reusing existing connection for ${peerUsername}`);
