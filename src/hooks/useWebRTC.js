@@ -1,5 +1,5 @@
 // frontend/src/hooks/useWebRTC.js
-// Fixed version with separate screen share handling
+// ✅ FIXED: Proper renegotiation handling
 
 import { useCallback, useRef, useReducer } from 'react';
 
@@ -16,12 +16,12 @@ const ActionTypes = {
 };
 
 const initialState = {
-  localStream: null,        // Always camera/mic
-  screenStream: null,       // Screen share stream (separate)
+  localStream: null,
+  screenStream: null,
   remoteStreams: new Map(),
   peerStates: new Map(),
   isScreenSharing: false,
-  screenSharingUserId: null, // 'local' or odată
+  screenSharingUserId: null,
   error: null
 };
 
@@ -35,15 +35,16 @@ function webRTCReducer(state, action) {
         ...state, 
         screenStream: action.payload.stream,
         isScreenSharing: action.payload.isSharing,
-        screenSharingUserId: action.payload.isSharing ? 'local' : null
+        screenSharingUserId: action.payload.isSharing ? 'local' : state.screenSharingUserId
       };
     
     case ActionTypes.ADD_REMOTE_STREAM: {
       const newRemoteStreams = new Map(state.remoteStreams);
+      const existing = newRemoteStreams.get(action.payload.peerId);
       newRemoteStreams.set(action.payload.peerId, {
         stream: action.payload.stream,
         username: action.payload.username,
-        isScreenShare: action.payload.isScreenShare || false
+        isScreenSharing: existing?.isScreenSharing || false
       });
       return { ...state, remoteStreams: newRemoteStreams };
     }
@@ -63,7 +64,16 @@ function webRTCReducer(state, action) {
     case ActionTypes.REMOVE_REMOTE_STREAM: {
       const newRemoteStreams = new Map(state.remoteStreams);
       newRemoteStreams.delete(action.payload);
-      return { ...state, remoteStreams: newRemoteStreams };
+      
+      const newScreenSharingUserId = state.screenSharingUserId === action.payload 
+        ? null 
+        : state.screenSharingUserId;
+      
+      return { 
+        ...state, 
+        remoteStreams: newRemoteStreams,
+        screenSharingUserId: newScreenSharingUserId
+      };
     }
     
     case ActionTypes.UPDATE_PEER_STATE: {
@@ -72,12 +82,26 @@ function webRTCReducer(state, action) {
       return { ...state, peerStates: newPeerStates };
     }
     
-    case ActionTypes.SET_SCREEN_SHARING_USER:
+    case ActionTypes.SET_SCREEN_SHARING_USER: {
+      const newRemoteStreams = new Map(state.remoteStreams);
+      
+      if (action.payload.peerId && action.payload.peerId !== 'local') {
+        const existing = newRemoteStreams.get(action.payload.peerId);
+        if (existing) {
+          newRemoteStreams.set(action.payload.peerId, {
+            ...existing,
+            isScreenSharing: action.payload.isSharing
+          });
+        }
+      }
+      
       return { 
-        ...state, 
-        screenSharingUserId: action.payload,
-        isScreenSharing: action.payload === 'local'
+        ...state,
+        remoteStreams: newRemoteStreams,
+        screenSharingUserId: action.payload.isSharing ? action.payload.peerId : null,
+        isScreenSharing: action.payload.peerId === 'local' ? action.payload.isSharing : state.isScreenSharing
       };
+    }
     
     case ActionTypes.SET_ERROR:
       return { ...state, error: action.payload };
@@ -90,12 +114,18 @@ function webRTCReducer(state, action) {
   }
 }
 
+// ✅ Enhanced ICE servers with more TURN options for restrictive networks
 const getIceServers = () => ({
   iceServers: [
+    // STUN servers
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:global.stun.twilio.com:3478' },
+    
+    // TURN servers (critical for restrictive networks like school WiFi)
     {
       urls: 'turn:openrelay.metered.ca:80',
       username: 'openrelayproject',
@@ -110,11 +140,19 @@ const getIceServers = () => ({
       urls: 'turn:openrelay.metered.ca:443?transport=tcp',
       username: 'openrelayproject',
       credential: 'openrelayproject'
+    },
+    // Additional TURN on port 80 (often not blocked)
+    {
+      urls: 'turn:openrelay.metered.ca:80?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
     }
   ],
   iceCandidatePoolSize: 10,
   bundlePolicy: 'max-bundle',
-  rtcpMuxPolicy: 'require'
+  rtcpMuxPolicy: 'require',
+  // ✅ Use all available candidates
+  iceTransportPolicy: 'all'
 });
 
 const getMediaConstraints = (quality = 'medium') => {
@@ -148,48 +186,114 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
   const peerConnections = useRef(new Map());
   const pendingCandidates = useRef(new Map());
   const originalVideoTrack = useRef(null);
-  const reconnectAttempts = useRef(new Map());
-  const localStreamRef = useRef(null); // Keep ref for cleanup
+  const localStreamRef = useRef(null);
+  const screenStreamRef = useRef(null);
   
-  const MAX_RECONNECT_ATTEMPTS = 3;
-  const RECONNECT_DELAY_BASE = 1000;
+  // ✅ NEW: Track negotiation state per peer to prevent concurrent negotiations
+  const negotiationState = useRef(new Map());
+  
+  // ✅ NEW: Queue for pending operations during negotiation
+  const operationQueue = useRef(new Map());
 
   const cleanupPeerConnection = useCallback((peerId) => {
     const pc = peerConnections.current.get(peerId);
     if (pc) {
+      // Remove all event handlers
+      pc.onicecandidate = null;
+      pc.oniceconnectionstatechange = null;
+      pc.onconnectionstatechange = null;
+      pc.onnegotiationneeded = null;
+      pc.ontrack = null;
       pc.close();
       peerConnections.current.delete(peerId);
     }
     
     pendingCandidates.current.delete(peerId);
-    reconnectAttempts.current.delete(peerId);
+    negotiationState.current.delete(peerId);
+    operationQueue.current.delete(peerId);
     
     dispatch({ type: ActionTypes.REMOVE_REMOTE_STREAM, payload: peerId });
   }, []);
 
-  const handleConnectionFailure = useCallback((peerId, peerUsername) => {
-    const attempts = reconnectAttempts.current.get(peerId) || 0;
+  // ✅ NEW: Safe negotiation wrapper
+  const safeNegotiate = useCallback(async (pc, peerId) => {
+    const state = negotiationState.current.get(peerId) || { isNegotiating: false };
     
-    if (attempts < MAX_RECONNECT_ATTEMPTS) {
-      console.log(`🔄 [WebRTC] Reconnecting to ${peerUsername} (attempt ${attempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
-      
-      reconnectAttempts.current.set(peerId, attempts + 1);
-      const delay = RECONNECT_DELAY_BASE * Math.pow(2, attempts);
-      
-      setTimeout(() => {
-        const pc = peerConnections.current.get(peerId);
-        if (pc && pc.iceConnectionState === 'failed') {
-          pc.restartIce();
-        }
-      }, delay);
-    } else {
-      console.log(`❌ [WebRTC] Max reconnection attempts reached for ${peerUsername}`);
-      cleanupPeerConnection(peerId);
+    // If already negotiating, queue this request
+    if (state.isNegotiating) {
+      console.log(`⏳ [WebRTC] Negotiation already in progress for ${peerId}, queuing...`);
+      state.needsRenegotiation = true;
+      negotiationState.current.set(peerId, state);
+      return;
     }
-  }, [cleanupPeerConnection]);
+    
+    // Check if connection is in a valid state for negotiation
+    if (pc.signalingState !== 'stable') {
+      console.log(`⏳ [WebRTC] Signaling state is ${pc.signalingState}, waiting...`);
+      state.needsRenegotiation = true;
+      negotiationState.current.set(peerId, state);
+      return;
+    }
+    
+    try {
+      state.isNegotiating = true;
+      state.needsRenegotiation = false;
+      negotiationState.current.set(peerId, state);
+      
+      console.log(`🔄 [WebRTC] Starting negotiation with ${peerId}`);
+      
+      const offer = await pc.createOffer();
+      
+      // Double-check state hasn't changed
+      if (pc.signalingState !== 'stable') {
+        console.log(`⚠️ [WebRTC] State changed during offer creation, aborting`);
+        return;
+      }
+      
+      await pc.setLocalDescription(offer);
+      
+      socket.emit('video_offer', {
+        roomId,
+        projectId,
+        targetUserId: peerId,
+        offer: pc.localDescription.toJSON()
+      });
+      
+      console.log(`✅ [WebRTC] Sent offer to ${peerId}`);
+      
+    } catch (error) {
+      console.error(`❌ [WebRTC] Negotiation failed:`, error);
+      
+      // ✅ Handle the specific m-line order error
+      if (error.message?.includes('m-lines') || error.message?.includes('order')) {
+        console.log(`🔧 [WebRTC] M-line order error, will recreate connection on next attempt`);
+        // Mark for recreation on next attempt
+        state.needsRecreation = true;
+      }
+    } finally {
+      state.isNegotiating = false;
+      negotiationState.current.set(peerId, state);
+      
+      // Check if renegotiation was requested while we were negotiating
+      if (state.needsRenegotiation) {
+        console.log(`🔄 [WebRTC] Processing queued renegotiation for ${peerId}`);
+        setTimeout(() => safeNegotiate(pc, peerId), 100);
+      }
+    }
+  }, [socket, roomId, projectId]);
 
-  const createPeerConnection = useCallback((peerId, peerUsername) => {
+  const createPeerConnection = useCallback((peerId, peerUsername, forceNew = false) => {
+    // Check if we need to recreate due to m-line error
+    const existingState = (negotiationState.current.get, visitorId) || {};
+    
+    if (peerConnections.current.has(peerId) && !forceNew && !existingState.needsRecreation) {
+      console.log(`♻️ [WebRTC] Reusing existing connection for ${peerUsername}`);
+      return peerConnections.current.get(peerId);
+    }
+    
+    // Clean up existing connection if any
     if (peerConnections.current.has(peerId)) {
+      console.log(`🔄 [WebRTC] Recreating connection for ${peerUsername}`);
       cleanupPeerConnection(peerId);
     }
 
@@ -197,17 +301,32 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
     
     const pc = new RTCPeerConnection(getIceServers());
     
+    // Initialize negotiation state
+    negotiationState.current.set(peerId, { 
+      isNegotiating: false, 
+      needsRenegotiation: false,
+      needsRecreation: false
+    });
+    
     pc.peerId = peerId;
     pc.peerUsername = peerUsername;
-    pc.makingOffer = false;
-    pc.ignoreOffer = false;
-    pc.isSettingRemoteAnswerPending = false;
     pc.polite = currentUser.id.toString() < peerId.toString();
     
-    // ✅ Add tracks from local stream (camera/mic)
+    console.log(`🤝 [WebRTC] We are ${pc.polite ? 'polite' : 'impolite'} peer`);
+    
+    // Add tracks from local stream
     const stream = localStreamRef.current;
     if (stream) {
       stream.getTracks().forEach(track => {
+        // If screen sharing, use screen track for video
+        if (track.kind === 'video' && screenStreamRef.current) {
+          const screenTrack = screenStreamRef.current.getVideoTracks()[0];
+          if (screenTrack) {
+            pc.addTrack(screenTrack, screenStreamRef.current);
+            console.log(`✅ [WebRTC] Added screen track to ${peerUsername}`);
+            return;
+          }
+        }
         pc.addTrack(track, stream);
         console.log(`✅ [WebRTC] Added ${track.kind} track to ${peerUsername}`);
       });
@@ -224,6 +343,7 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
       }
     };
 
+    // ✅ Better ICE connection state handling
     pc.oniceconnectionstatechange = () => {
       console.log(`🧊 [WebRTC] ICE state (${peerUsername}): ${pc.iceConnectionState}`);
       
@@ -232,10 +352,24 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
         payload: { peerId, state: pc.iceConnectionState }
       });
 
-      if (pc.iceConnectionState === 'failed') {
-        handleConnectionFailure(peerId, peerUsername);
-      } else if (pc.iceConnectionState === 'connected') {
-        reconnectAttempts.current.set(peerId, 0);
+      switch (pc.iceConnectionState) {
+        case 'failed':
+          console.log(`🔄 [WebRTC] ICE failed, restarting ICE...`);
+          pc.restartIce();
+          break;
+        case 'disconnected':
+          // Wait a bit before taking action - might recover
+          setTimeout(() => {
+            if (pc.iceConnectionState === 'disconnected') {
+              console.log(`🔄 [WebRTC] Still disconnected, restarting ICE...`);
+              pc.restartIce();
+            }
+          }, 3000);
+          break;
+        case 'connected':
+        case 'completed':
+          console.log(`✅ [WebRTC] Connected to ${peerUsername}`);
+          break;
       }
     };
 
@@ -243,32 +377,20 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
       console.log(`🔌 [WebRTC] Connection state (${peerUsername}): ${pc.connectionState}`);
       
       if (pc.connectionState === 'failed') {
-        handleConnectionFailure(peerId, peerUsername);
-      } else if (pc.connectionState === 'disconnected') {
+        console.log(`❌ [WebRTC] Connection failed, cleaning up...`);
+        // Don't immediately cleanup - give it a chance to recover
         setTimeout(() => {
-          if (pc.connectionState === 'disconnected') {
-            handleConnectionFailure(peerId, peerUsername);
+          if (pc.connectionState === 'failed') {
+            cleanupPeerConnection(peerId);
           }
         }, 5000);
       }
     };
 
+    // ✅ FIXED: Proper negotiationneeded handling
     pc.onnegotiationneeded = async () => {
-      try {
-        pc.makingOffer = true;
-        await pc.setLocalDescription();
-        
-        socket.emit('video_offer', {
-          roomId,
-          projectId,
-          targetUserId: peerId,
-          offer: pc.localDescription.toJSON()
-        });
-      } catch (error) {
-        console.error(`❌ [WebRTC] Negotiation error:`, error);
-      } finally {
-        pc.makingOffer = false;
-      }
+      console.log(`📢 [WebRTC] Negotiation needed for ${peerUsername}`);
+      await safeNegotiate(pc, peerId);
     };
 
     pc.ontrack = ({ track, streams }) => {
@@ -282,8 +404,7 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
           payload: {
             peerId,
             stream,
-            username: peerUsername,
-            isScreenShare: false
+            username: peerUsername
           }
         });
       };
@@ -296,13 +417,15 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
     if (pending?.length > 0) {
       console.log(`🧊 [WebRTC] Processing ${pending.length} pending ICE candidates`);
       pending.forEach(candidate => {
-        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
+        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+          console.warn(`⚠️ [WebRTC] Failed to add pending candidate:`, err.message);
+        });
       });
       pendingCandidates.current.delete(peerId);
     }
 
     return pc;
-  }, [socket, roomId, projectId, currentUser.id, cleanupPeerConnection, handleConnectionFailure]);
+  }, [socket, roomId, projectId, currentUser.id, cleanupPeerConnection, safeNegotiate]);
 
   const initializeMedia = useCallback(async (quality = 'medium') => {
     try {
@@ -337,6 +460,7 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
     }
   }, []);
 
+  // ✅ FIXED: Proper offer handling with Perfect Negotiation
   const handleOffer = useCallback(async ({ userId, username, offer }) => {
     console.log(`📨 [WebRTC] Received offer from ${username}`);
     
@@ -345,19 +469,42 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
       pc = createPeerConnection(userId, username);
     }
 
-    const readyForOffer = !pc.makingOffer && 
-                          (pc.signalingState === 'stable' || pc.isSettingRemoteAnswerPending);
-    const offerCollision = !readyForOffer;
-
-    pc.ignoreOffer = !pc.polite && offerCollision;
+    const negState = negotiationState.current.get(userId) || {};
     
-    if (pc.ignoreOffer) {
-      console.log(`⚠️ [WebRTC] Ignoring colliding offer`);
-      return;
+    // Perfect Negotiation: Check for collision
+    const offerCollision = negState.isNegotiating || pc.signalingState !== 'stable';
+    
+    if (offerCollision) {
+      if (!pc.polite) {
+        // We're impolite, ignore incoming offer
+        console.log(`⚠️ [WebRTC] Ignoring colliding offer (we're impolite)`);
+        return;
+      }
+      
+      // We're polite, rollback our offer
+      console.log(`🔄 [WebRTC] Rolling back our offer (we're polite)`);
+      try {
+        await pc.setLocalDescription({ type: 'rollback' });
+      } catch (e) {
+        console.warn(`⚠️ [WebRTC] Rollback failed:`, e.message);
+      }
     }
 
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      
+      // Process any pending candidates now that we have remote description
+      const pending = pendingCandidates.current.get(userId);
+      if (pending?.length > 0) {
+        for (const candidate of pending) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (e) {
+            console.warn(`⚠️ [WebRTC] Failed to add pending candidate:`, e.message);
+          }
+        }
+        pendingCandidates.current.delete(userId);
+      }
       
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
@@ -372,8 +519,17 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
       console.log(`✅ [WebRTC] Sent answer to ${username}`);
     } catch (error) {
       console.error(`❌ [WebRTC] Failed to handle offer:`, error);
+      
+      // If we get m-line error, mark for recreation
+      if (error.message?.includes('m-lines') || error.message?.includes('order')) {
+        console.log(`🔧 [WebRTC] M-line error in answer, recreating connection...`);
+        cleanupPeerConnection(userId);
+        
+        // Recreate and wait for new offer
+        createPeerConnection(userId, username, true);
+      }
     }
-  }, [socket, roomId, projectId, createPeerConnection]);
+  }, [socket, roomId, projectId, createPeerConnection, cleanupPeerConnection]);
 
   const handleAnswer = useCallback(async ({ userId, answer }) => {
     const pc = peerConnections.current.get(userId);
@@ -382,58 +538,70 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
       return;
     }
 
+    const negState = negotiationState.current.get(userId) || {};
+
     try {
-      pc.isSettingRemoteAnswerPending = true;
+      // Only accept answer if we're expecting one
+      if (pc.signalingState !== 'have-local-offer') {
+        console.warn(`⚠️ [WebRTC] Unexpected answer, signaling state: ${pc.signalingState}`);
+        return;
+      }
+      
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      pc.isSettingRemoteAnswerPending = false;
+      console.log(`✅ [WebRTC] Set remote answer from ${userId}`);
+      
+      // Process pending candidates
+      const pending = pendingCandidates.current.get(userId);
+      if (pending?.length > 0) {
+        for (const candidate of pending) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (e) {
+            console.warn(`⚠️ [WebRTC] Failed to add pending candidate:`, e.message);
+          }
+        }
+        pendingCandidates.current.delete(userId);
+      }
+      
     } catch (error) {
       console.error(`❌ [WebRTC] Failed to handle answer:`, error);
-      pc.isSettingRemoteAnswerPending = false;
+      
+      // If we get m-line error, mark for recreation
+      if (error.message?.includes('m-lines') || error.message?.includes('order')) {
+        negState.needsRecreation = true;
+        negotiationState.current.set(userId, negState);
+      }
     }
   }, []);
 
   const handleIceCandidate = useCallback(async ({ userId, candidate }) => {
     const pc = peerConnections.current.get(userId);
     
-    if (!pc || !pc.remoteDescription) {
+    if (!pc || !pc.remoteDescription || !pc.remoteDescription.type) {
+      // Queue candidate for later
       if (!pendingCandidates.current.has(userId)) {
         pendingCandidates.current.set(userId, []);
       }
       pendingCandidates.current.get(userId).push(candidate);
+      console.log(`📦 [WebRTC] Queued ICE candidate for ${userId}`);
       return;
     }
 
     try {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (error) {
-      if (!pc.ignoreOffer) {
-        console.error(`❌ [WebRTC] Failed to add ICE candidate:`, error);
+      // Ignore errors for candidates that arrive at wrong time
+      if (!error.message?.includes('location invalid')) {
+        console.warn(`⚠️ [WebRTC] Failed to add ICE candidate:`, error.message);
       }
     }
   }, []);
 
+  // ✅ FIXED: createOffer now uses safeNegotiate
   const createOffer = useCallback(async (peerId, peerUsername) => {
     const pc = createPeerConnection(peerId, peerUsername);
-    
-    try {
-      pc.makingOffer = true;
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      
-      socket.emit('video_offer', {
-        roomId,
-        projectId,
-        targetUserId: peerId,
-        offer: pc.localDescription.toJSON()
-      });
-      
-      console.log(`✅ [WebRTC] Sent offer to ${peerUsername}`);
-    } catch (error) {
-      console.error(`❌ [WebRTC] Failed to create offer:`, error);
-    } finally {
-      pc.makingOffer = false;
-    }
-  }, [socket, roomId, projectId, createPeerConnection]);
+    await safeNegotiate(pc, peerId);
+  }, [createPeerConnection, safeNegotiate]);
 
   const toggleAudio = useCallback((enabled) => {
     const stream = localStreamRef.current;
@@ -456,7 +624,6 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
     if (originalVideoTrack.current) {
       originalVideoTrack.current.enabled = enabled;
       
-      // Only emit if not screen sharing (peers see screen, not camera)
       if (!state.isScreenSharing) {
         socket.emit('video_track_toggle', {
           roomId,
@@ -469,7 +636,7 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
     }
   }, [state.isScreenSharing, socket, roomId, projectId, currentUser.id]);
 
-  // ✅ FIXED: Screen share now keeps camera separate
+  // ✅ FIXED: Screen share with proper track replacement (no renegotiation needed)
   const startScreenShare = useCallback(async () => {
     try {
       console.log('🖥️ [WebRTC] Starting screen share...');
@@ -480,26 +647,28 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
       });
 
       const screenTrack = screenStream.getVideoTracks()[0];
+      screenStreamRef.current = screenStream;
       
-      // ✅ Replace camera track with screen track in peer connections
-      // This sends screen to remote peers
-      const replacePromises = Array.from(peerConnections.current.values()).map(pc => {
+      // ✅ Use replaceTrack - doesn't require renegotiation
+      const replacePromises = [];
+      peerConnections.current.forEach((pc, visitorId) => {
         const sender = pc.getSenders().find(s => s.track?.kind === 'video');
         if (sender) {
-          return sender.replaceTrack(screenTrack);
+          replacePromises.push(
+            sender.replaceTrack(screenTrack)
+              .then(() => console.log(`✅ [WebRTC] Replaced track for ${visitorId}`))
+              .catch(err => console.error(`❌ [WebRTC] Failed to replace track:`, err))
+          );
         }
-        return Promise.resolve();
       });
       
       await Promise.all(replacePromises);
       
-      // Handle browser stop button
       screenTrack.onended = () => {
         console.log('🖥️ [WebRTC] Screen share ended by user');
         stopScreenShare();
       };
       
-      // ✅ Store screen stream separately - DON'T touch localStream
       dispatch({
         type: ActionTypes.SET_SCREEN_STREAM,
         payload: { stream: screenStream, isSharing: true }
@@ -519,28 +688,30 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
     }
   }, [socket, roomId, projectId, currentUser.id]);
 
-  // ✅ FIXED: Stop screen share and restore camera to peers
   const stopScreenShare = useCallback(async () => {
     console.log('🛑 [WebRTC] Stopping screen share...');
     
-    // Stop screen stream tracks
-    if (state.screenStream) {
-      state.screenStream.getTracks().forEach(track => track.stop());
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(track => track.stop());
+      screenStreamRef.current = null;
     }
 
-    // ✅ Restore camera track to peer connections
     if (originalVideoTrack.current) {
-      const replacePromises = Array.from(peerConnections.current.values()).map(pc => {
+      // ✅ Use replaceTrack - doesn't require renegotiation
+      const replacePromises = [];
+      peerConnections.current.forEach((pc, visitorId) => {
         const sender = pc.getSenders().find(s => s.track?.kind === 'video');
         if (sender) {
-          return sender.replaceTrack(originalVideoTrack.current);
+          replacePromises.push(
+            sender.replaceTrack(originalVideoTrack.current)
+              .then(() => console.log(`✅ [WebRTC] Restored camera for ${ visitorId}`))
+              .catch(err => console.error(`❌ [WebRTC] Failed to restore camera:`, err))
+          );
         }
-        return Promise.resolve();
       });
       
       await Promise.all(replacePromises);
       
-      // Notify peers about camera state
       socket.emit('video_track_toggle', {
         roomId,
         projectId,
@@ -561,42 +732,49 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
       userId: currentUser.id
     });
     
-    console.log('✅ [WebRTC] Screen share stopped, camera restored');
-  }, [state.screenStream, socket, roomId, projectId, currentUser.id]);
+    console.log('✅ [WebRTC] Screen share stopped');
+  }, [socket, roomId, projectId, currentUser.id]);
 
-  // Handle remote screen share events
   const handleRemoteScreenShareStarted = useCallback((userId) => {
     console.log('🖥️ [WebRTC] Remote user started screen share:', userId);
-    dispatch({ type: ActionTypes.SET_SCREEN_SHARING_USER, payload: userId });
+    dispatch({ 
+      type: ActionTypes.SET_SCREEN_SHARING_USER, 
+      payload: { peerId: userId, isSharing: true }
+    });
   }, []);
 
   const handleRemoteScreenShareStopped = useCallback((userId) => {
     console.log('🖥️ [WebRTC] Remote user stopped screen share:', userId);
-    if (state.screenSharingUserId === userId) {
-      dispatch({ type: ActionTypes.SET_SCREEN_SHARING_USER, payload: null });
-    }
-  }, [state.screenSharingUserId]);
+    dispatch({ 
+      type: ActionTypes.SET_SCREEN_SHARING_USER, 
+      payload: { peerId: userId, isSharing: false }
+    });
+  }, []);
 
   const cleanup = useCallback(() => {
     console.log('🧹 [WebRTC] Cleaning up...');
     
-    peerConnections.current.forEach((_, peerId) => {
-      cleanupPeerConnection(peerId);
+    peerConnections.current.forEach((_,  visitorId) => {
+      cleanupPeerConnection(visitorId);
     });
     
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
     }
     
-    if (state.screenStream) {
-      state.screenStream.getTracks().forEach(track => track.stop());
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(track => track.stop());
+      screenStreamRef.current = null;
     }
+    
+    negotiationState.current.clear();
+    operationQueue.current.clear();
     
     dispatch({ type: ActionTypes.RESET });
-  }, [state.screenStream, cleanupPeerConnection]);
+  }, [cleanupPeerConnection]);
 
   return {
-    // State
     localStream: state.localStream,
     screenStream: state.screenStream,
     remoteStreams: state.remoteStreams,
@@ -605,7 +783,6 @@ export function useWebRTC({ socket, roomId, projectId, currentUser }) {
     screenSharingUserId: state.screenSharingUserId,
     error: state.error,
     
-    // Actions
     initializeMedia,
     createOffer,
     handleOffer,
