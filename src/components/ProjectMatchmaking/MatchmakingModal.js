@@ -609,22 +609,7 @@ const MatchmakingModal = ({
         </svg>
         
         <div style={styles.container} onClick={(e) => e.stopPropagation()}>
-          <button 
-            style={styles.closeButton}
-            onClick={onClose}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-              e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)';
-              e.currentTarget.style.color = '#ef4444';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-              e.currentTarget.style.color = '#6b7280';
-            }}
-          >
-            <X size={20} />
-          </button>
+         
 
           {/* Header */}
           <div style={styles.headerContainer}>
