@@ -427,106 +427,74 @@ function Onboarding() {
       marginBottom: '0',
       fontWeight: '400'
     },
-    progressContainer: {
+    // Styles for minimal clean stepper
+progressContainer: {
   marginBottom: '2.5rem',
   position: 'relative',
-  zIndex: 3,
-  padding: '0 1rem'
+  zIndex: 3
 },
-progressWrapper: {
+stepperContainer: {
   display: 'flex',
-  alignItems: 'flex-start',
+  alignItems: 'center',
   justifyContent: 'center',
+  maxWidth: '480px',
+  margin: '0 auto',
+  padding: '0 20px'
+},
+stepperLine: {
+  flex: 1,
+  height: '2px',
+  background: 'rgba(255, 255, 255, 0.1)',
   position: 'relative',
-  maxWidth: '500px',
-  margin: '0 auto'
+  margin: '0 -1px'
 },
-progressLineContainer: {
-  position: 'absolute',
-  top: '24px',
-  left: '60px',
-  right: '60px',
-  height: '3px',
-  display: 'flex',
-  alignItems: 'center'
+stepperLineFilled: {
+  background: 'linear-gradient(90deg, #10b981, #22c55e)',
+  boxShadow: '0 0 8px rgba(16, 185, 129, 0.4)'
 },
-progressLineBackground: {
-  position: 'absolute',
-  top: 0,
-  left: 0,
-  right: 0,
-  height: '100%',
-  backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  borderRadius: '2px'
-},
-progressLineFill: {
-  position: 'absolute',
-  top: 0,
-  left: 0,
-  height: '100%',
-  background: 'linear-gradient(90deg, #10b981, #3b82f6)',
-  borderRadius: '2px',
-  transition: 'width 0.5s ease',
-  boxShadow: '0 0 10px rgba(59, 130, 246, 0.5)'
-},
-progressStepsRow: {
-  display: 'flex',
-  justifyContent: 'space-between',
-  width: '100%',
-  position: 'relative',
-  zIndex: 2
-},
-progressStepContainer: {
+stepperNode: {
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
-  gap: '10px',
-  width: '80px'
+  gap: '8px',
+  position: 'relative',
+  zIndex: 2
 },
-progressStep: {
-  width: '48px',
-  height: '48px',
-  borderRadius: '14px',
-  background: 'rgba(15, 23, 42, 0.95)',
-  border: '2px solid rgba(255, 255, 255, 0.1)',
+stepperCircle: {
+  width: '44px',
+  height: '44px',
+  borderRadius: '12px',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
+  background: '#0f1116',
+  border: '2px solid rgba(255, 255, 255, 0.15)',
   color: '#64748b',
-  transition: 'all 0.3s ease',
-  position: 'relative',
-  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
+  transition: 'all 0.3s ease'
 },
-progressStepActive: {
-  background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.15))',
+stepperCircleActive: {
   border: '2px solid #3b82f6',
   color: '#3b82f6',
-  boxShadow: '0 0 25px rgba(59, 130, 246, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3)'
+  background: 'rgba(59, 130, 246, 0.1)',
+  boxShadow: '0 0 20px rgba(59, 130, 246, 0.3)'
 },
-progressStepComplete: {
-  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.15))',
+stepperCircleComplete: {
   border: '2px solid #10b981',
   color: '#10b981',
-  boxShadow: '0 0 15px rgba(16, 185, 129, 0.3), 0 4px 12px rgba(0, 0, 0, 0.3)'
+  background: 'rgba(16, 185, 129, 0.1)'
 },
-progressStepNumber: {
-  fontSize: '14px',
-  fontWeight: '700',
-  fontFamily: 'monospace'
-},
-progressStepLabel: {
-  fontSize: '11px',
-  color: '#64748b',
+stepperLabel: {
+  fontSize: '10px',
   fontWeight: '600',
+  color: '#64748b',
   textTransform: 'uppercase',
   letterSpacing: '0.5px',
-  textAlign: 'center',
-  whiteSpace: 'nowrap'
+  textAlign: 'center'
 },
-progressStepLabelActive: {
+stepperLabelActive: {
   color: '#3b82f6'
 },
-progressStepLabelComplete: {
+stepperLabelComplete: {
   color: '#10b981'
 },
     stepContainer: {
@@ -1275,52 +1243,45 @@ progressStepLabelComplete: {
           )}
 
           {/* Progress Indicator */}
-          {/* Progress Indicator */}
-<div style={styles.progressContainer}>
-  <div style={styles.progressWrapper}>
-    {/* Connection Line */}
-    <div style={styles.progressLineContainer}>
-      <div style={styles.progressLineBackground} />
-      <div style={{
-        ...styles.progressLineFill,
-        width: `${((currentStep - 1) / 3) * 100}%`
-      }} />
-    </div>
-    
-    {/* Steps */}
-    <div style={styles.progressStepsRow}>
-      {[1, 2, 3, 4].map((step) => {
-        const StepIcon = stepIcons[step];
-        const isActive = step === currentStep;
-        const isComplete = step < currentStep;
-        
-        return (
-          <div key={step} style={styles.progressStepContainer}>
+          <div style={styles.progressContainer}>
+  <div style={styles.stepperContainer}>
+    {[1, 2, 3, 4].map((step, index) => {
+      const StepIcon = stepIcons[step];
+      const isActive = step === currentStep;
+      const isComplete = step < currentStep;
+      
+      return (
+        <React.Fragment key={step}>
+          {/* Step Node */}
+          <div style={styles.stepperNode}>
             <div
-              className="progress-step"
               style={{
-                ...styles.progressStep,
-                ...(isActive ? styles.progressStepActive : {}),
-                ...(isComplete ? styles.progressStepComplete : {})
+                ...styles.stepperCircle,
+                ...(isActive ? styles.stepperCircleActive : {}),
+                ...(isComplete ? styles.stepperCircleComplete : {})
               }}
             >
-              {isComplete ? (
-                <CheckCircle size={22} />
-              ) : (
-                <StepIcon size={22} />
-              )}
+              {isComplete ? <CheckCircle size={20} /> : <StepIcon size={20} />}
             </div>
             <span style={{
-              ...styles.progressStepLabel,
-              ...(isActive ? styles.progressStepLabelActive : {}),
-              ...(isComplete ? styles.progressStepLabelComplete : {})
+              ...styles.stepperLabel,
+              ...(isActive ? styles.stepperLabelActive : {}),
+              ...(isComplete ? styles.stepperLabelComplete : {})
             }}>
               {stepLabels[step]}
             </span>
           </div>
-        );
-      })}
-    </div>
+          
+          {/* Connector Line (not after last step) */}
+          {index < 3 && (
+            <div style={{
+              ...styles.stepperLine,
+              ...(step < currentStep ? styles.stepperLineFilled : {})
+            }} />
+          )}
+        </React.Fragment>
+      );
+    })}
   </div>
 </div>
 
