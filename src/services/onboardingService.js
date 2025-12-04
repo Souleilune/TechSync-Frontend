@@ -1,3 +1,4 @@
+// src/services/onboardingService.js - CORRECTED VERSION
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
@@ -58,5 +59,14 @@ export const onboardingService = {
     setAuthToken(token);
     const response = await api.post('/onboarding/complete', onboardingData);
     return response.data;
+  },
+
+  // Get user's current onboarding data (requires auth)
+  getUserOnboardingData: async (token) => {
+    setAuthToken(token);
+    const response = await api.get('/onboarding/user-data');
+    return response.data;
   }
 };
+
+export default onboardingService;
