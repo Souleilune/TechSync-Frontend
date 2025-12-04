@@ -1,7 +1,7 @@
 // src/pages/Onboarding.js
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { onboardingService } from '../services/onboardingService';
 import { Code, BookOpen, Calendar, Check } from 'lucide-react';
 import CodingChallengeStep from '../components/Onboarding/CodingChallengeStep';
