@@ -428,85 +428,107 @@ function Onboarding() {
       fontWeight: '400'
     },
     progressContainer: {
-      marginBottom: '2rem',
-      position: 'relative',
-      zIndex: 3
-    },
-    progressBar: {
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      gap: '0',
-      marginBottom: '1rem',
-      position: 'relative'
-    },
-    progressLine: {
-      position: 'absolute',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      width: '280px',
-      height: '2px',
-      background: 'rgba(255, 255, 255, 0.1)',
-      zIndex: 0
-    },
-    progressLineFill: {
-      position: 'absolute',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      height: '2px',
-      background: 'linear-gradient(90deg, #10b981, #3b82f6)',
-      zIndex: 1,
-      transition: 'width 0.5s ease'
-    },
-    progressStepContainer: {
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      gap: '8px',
-      zIndex: 2,
-      padding: '0 20px'
-    },
-    progressStep: {
-      width: '48px',
-      height: '48px',
-      borderRadius: '14px',
-      background: 'rgba(15, 23, 42, 0.9)',
-      border: '2px solid rgba(255, 255, 255, 0.1)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: '#64748b',
-      fontWeight: 'bold',
-      fontSize: '0.875rem',
-      transition: 'all 0.3s ease',
-      position: 'relative'
-    },
-    progressStepActive: {
-      background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.1))',
-      border: '2px solid #3b82f6',
-      color: '#3b82f6',
-      boxShadow: '0 0 25px rgba(59, 130, 246, 0.3)'
-    },
-    progressStepComplete: {
-      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.1))',
-      border: '2px solid #10b981',
-      color: '#10b981'
-    },
-    progressStepLabel: {
-      fontSize: '11px',
-      color: '#64748b',
-      fontWeight: '500',
-      textTransform: 'uppercase',
-      letterSpacing: '0.5px'
-    },
-    progressStepLabelActive: {
-      color: '#3b82f6'
-    },
-    progressStepLabelComplete: {
-      color: '#10b981'
-    },
+  marginBottom: '2.5rem',
+  position: 'relative',
+  zIndex: 3,
+  padding: '0 1rem'
+},
+progressWrapper: {
+  display: 'flex',
+  alignItems: 'flex-start',
+  justifyContent: 'center',
+  position: 'relative',
+  maxWidth: '500px',
+  margin: '0 auto'
+},
+progressLineContainer: {
+  position: 'absolute',
+  top: '24px',
+  left: '60px',
+  right: '60px',
+  height: '3px',
+  display: 'flex',
+  alignItems: 'center'
+},
+progressLineBackground: {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  height: '100%',
+  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  borderRadius: '2px'
+},
+progressLineFill: {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  height: '100%',
+  background: 'linear-gradient(90deg, #10b981, #3b82f6)',
+  borderRadius: '2px',
+  transition: 'width 0.5s ease',
+  boxShadow: '0 0 10px rgba(59, 130, 246, 0.5)'
+},
+progressStepsRow: {
+  display: 'flex',
+  justifyContent: 'space-between',
+  width: '100%',
+  position: 'relative',
+  zIndex: 2
+},
+progressStepContainer: {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: '10px',
+  width: '80px'
+},
+progressStep: {
+  width: '48px',
+  height: '48px',
+  borderRadius: '14px',
+  background: 'rgba(15, 23, 42, 0.95)',
+  border: '2px solid rgba(255, 255, 255, 0.1)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: '#64748b',
+  transition: 'all 0.3s ease',
+  position: 'relative',
+  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
+},
+progressStepActive: {
+  background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.15))',
+  border: '2px solid #3b82f6',
+  color: '#3b82f6',
+  boxShadow: '0 0 25px rgba(59, 130, 246, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3)'
+},
+progressStepComplete: {
+  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.15))',
+  border: '2px solid #10b981',
+  color: '#10b981',
+  boxShadow: '0 0 15px rgba(16, 185, 129, 0.3), 0 4px 12px rgba(0, 0, 0, 0.3)'
+},
+progressStepNumber: {
+  fontSize: '14px',
+  fontWeight: '700',
+  fontFamily: 'monospace'
+},
+progressStepLabel: {
+  fontSize: '11px',
+  color: '#64748b',
+  fontWeight: '600',
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  textAlign: 'center',
+  whiteSpace: 'nowrap'
+},
+progressStepLabelActive: {
+  color: '#3b82f6'
+},
+progressStepLabelComplete: {
+  color: '#10b981'
+},
     stepContainer: {
       marginBottom: '2rem',
       textAlign: 'center',
@@ -1253,47 +1275,54 @@ function Onboarding() {
           )}
 
           {/* Progress Indicator */}
-          <div style={styles.progressContainer}>
-            <div style={styles.progressBar}>
-              <div style={styles.progressLine} />
-              <div style={{
-                ...styles.progressLineFill,
-                width: `${((currentStep - 1) / 3) * 280}px`
-              }} />
-              
-              {[1, 2, 3, 4].map((step) => {
-                const StepIcon = stepIcons[step];
-                const isActive = step === currentStep;
-                const isComplete = step < currentStep;
-                
-                return (
-                  <div key={step} style={styles.progressStepContainer}>
-                    <div
-                      className="progress-step"
-                      style={{
-                        ...styles.progressStep,
-                        ...(isActive ? styles.progressStepActive : {}),
-                        ...(isComplete ? styles.progressStepComplete : {})
-                      }}
-                    >
-                      {isComplete ? (
-                        <CheckCircle size={20} />
-                      ) : (
-                        <StepIcon size={20} />
-                      )}
-                    </div>
-                    <span style={{
-                      ...styles.progressStepLabel,
-                      ...(isActive ? styles.progressStepLabelActive : {}),
-                      ...(isComplete ? styles.progressStepLabelComplete : {})
-                    }}>
-                      {stepLabels[step]}
-                    </span>
-                  </div>
-                );
-              })}
+          {/* Progress Indicator */}
+<div style={styles.progressContainer}>
+  <div style={styles.progressWrapper}>
+    {/* Connection Line */}
+    <div style={styles.progressLineContainer}>
+      <div style={styles.progressLineBackground} />
+      <div style={{
+        ...styles.progressLineFill,
+        width: `${((currentStep - 1) / 3) * 100}%`
+      }} />
+    </div>
+    
+    {/* Steps */}
+    <div style={styles.progressStepsRow}>
+      {[1, 2, 3, 4].map((step) => {
+        const StepIcon = stepIcons[step];
+        const isActive = step === currentStep;
+        const isComplete = step < currentStep;
+        
+        return (
+          <div key={step} style={styles.progressStepContainer}>
+            <div
+              className="progress-step"
+              style={{
+                ...styles.progressStep,
+                ...(isActive ? styles.progressStepActive : {}),
+                ...(isComplete ? styles.progressStepComplete : {})
+              }}
+            >
+              {isComplete ? (
+                <CheckCircle size={22} />
+              ) : (
+                <StepIcon size={22} />
+              )}
             </div>
+            <span style={{
+              ...styles.progressStepLabel,
+              ...(isActive ? styles.progressStepLabelActive : {}),
+              ...(isComplete ? styles.progressStepLabelComplete : {})
+            }}>
+              {stepLabels[step]}
+            </span>
           </div>
+        );
+      })}
+    </div>
+  </div>
+</div>
 
           {/* Error/Success messages */}
           {error && (
