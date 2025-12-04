@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { onboardingService } from '../services/onboardingService';
 import { Code, BookOpen, Calendar, Check } from 'lucide-react';
-import CodingChallengeStep from '../components/PreAssessmentModal';
+import PreAssessmentModal from '../components/PreAssessmentModal';
 import AssessmentResultModal from '../components/AssessmentResultModal';
 
 // Background decorative component
@@ -396,13 +396,10 @@ function Onboarding() {
 
         {/* Step 4: Pre-Assessment Challenges */}
         {currentStep === 4 && !allChallengesComplete && (
-          <CodingChallengeStep
+          <PreAssessmentModal
             language={selectedLanguages[currentChallengeIndex]}
-            challengeIndex={currentChallengeIndex}
-            totalChallenges={selectedLanguages.length}
             onComplete={handleChallengeComplete}
-            userId={user?.id}
-            token={token}
+            onClose={() => setCurrentStep(3)} // Add this if you want cancel to work
           />
         )}
 
