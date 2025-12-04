@@ -1,5 +1,5 @@
 // frontend/src/components/PreAssessmentModal.js
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import ChallengeAPI from '../services/challengeAPI';
 import { Code2, Clock, AlertTriangle, Lightbulb, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -110,36 +110,50 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
       setIsSubmitting(true);
       setError(null);
 
+      // FIX: Match the backend controller's expected fields
+      // Backend expects: challenge_id, submitted_code, and OPTIONAL programming_language_id
       const attemptData = {
         challenge_id: challenge.id,
         submitted_code: submittedCode,
-        programming_language_id: language.language_id
+        programming_language_id: language.language_id  // This is correct
       };
+
+      console.log('📝 Submitting assessment:', {
+        challenge_id: challenge.id,
+        programming_language_id: language.language_id,
+        code_length: submittedCode.length
+      });
 
       const response = await ChallengeAPI.submitSimpleChallenge(attemptData);
 
+      console.log('📦 Assessment response:', response);
+
       if (response.success) {
-        const result = response.data;
+        // Backend returns: { success, message, attempt, evaluation, award }
+        const result = response.attempt || response.data;
         
         // Determine proficiency level based on score
         let proficiencyLevel = 'beginner';
-        if (result.score >= 90) proficiencyLevel = 'expert';
-        else if (result.score >= 75) proficiencyLevel = 'advanced';
-        else if (result.score >= 60) proficiencyLevel = 'intermediate';
+        const score = result.score || (response.evaluation?.score) || 0;
+        
+        if (score >= 90) proficiencyLevel = 'expert';
+        else if (score >= 75) proficiencyLevel = 'advanced';
+        else if (score >= 60) proficiencyLevel = 'intermediate';
 
         onComplete({
           languageId: language.language_id,
-          passed: result.passed || result.score >= 50,
-          score: result.score,
+          passed: result.status === 'passed' || result.passed || score >= 50,
+          score: score,
           proficiencyLevel,
-          feedback: result.feedback || 'Assessment complete'
+          feedback: result.feedback || response.evaluation?.feedback || 'Assessment complete'
         });
       } else {
         throw new Error(response.message || 'Failed to submit assessment');
       }
     } catch (err) {
-      console.error('Error submitting assessment:', err);
-      setError('Failed to submit assessment. Please try again.');
+      console.error('❌ Error submitting assessment:', err);
+      console.error('❌ Error details:', err.response?.data);
+      setError(err.response?.data?.message || err.message || 'Failed to submit assessment. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -154,91 +168,101 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
   const styles = {
     overlay: {
       position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.8)',
-      zIndex: 1000,
+      inset: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.75)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '2rem'
+      zIndex: 1000,
+      padding: '1rem'
     },
     modal: {
-      backgroundColor: '#1a1d29',
-      borderRadius: '12px',
-      maxWidth: '900px',
+      backgroundColor: '#1a1c20',
+      borderRadius: '16px',
       width: '100%',
+      maxWidth: '900px',
       maxHeight: '90vh',
       overflow: 'auto',
+      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
       border: '1px solid rgba(255, 255, 255, 0.1)'
     },
     header: {
-      padding: '2rem',
+      padding: '1.5rem',
       borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
       display: 'flex',
       justifyContent: 'space-between',
-      alignItems: 'center'
+      alignItems: 'center',
+      backgroundColor: 'rgba(59, 130, 246, 0.1)'
+    },
+    headerContent: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.75rem'
     },
     title: {
       fontSize: '1.5rem',
       fontWeight: 'bold',
       color: 'white',
-      marginBottom: '0.5rem'
+      margin: 0
     },
     subtitle: {
+      fontSize: '0.875rem',
       color: '#9ca3af',
-      fontSize: '0.875rem'
+      margin: '0.25rem 0 0 0'
     },
     closeButton: {
-      background: 'rgba(255, 255, 255, 0.1)',
+      background: 'transparent',
       border: 'none',
-      color: 'white',
-      fontSize: '1.5rem',
-      width: '36px',
-      height: '36px',
-      borderRadius: '6px',
+      color: '#9ca3af',
       cursor: 'pointer',
+      padding: '0.5rem',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
+      borderRadius: '8px',
       transition: 'all 0.2s'
     },
     content: {
-      padding: '2rem'
+      padding: '1.5rem'
     },
-    infoGrid: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(3, 1fr)',
-      gap: '1rem',
-      marginBottom: '2rem'
-    },
-    infoCard: {
+    timerSection: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
       padding: '1rem',
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-      borderRadius: '8px',
-      border: '1px solid rgba(255, 255, 255, 0.1)'
+      backgroundColor: 'rgba(59, 130, 246, 0.1)',
+      borderRadius: '12px',
+      marginBottom: '1.5rem',
+      border: '1px solid rgba(59, 130, 246, 0.2)'
     },
-    infoLabel: {
-      fontSize: '0.75rem',
-      color: '#9ca3af',
-      textTransform: 'uppercase',
-      marginBottom: '0.25rem'
-    },
-    infoValue: {
-      fontSize: '1.25rem',
-      fontWeight: 'bold',
-      color: 'white'
-    },
-    section: {
-      marginBottom: '2rem'
-    },
-    sectionTitle: {
+    timer: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.5rem',
       fontSize: '1.125rem',
       fontWeight: '600',
-      color: 'white',
+      color: '#60a5fa'
+    },
+    warningBanner: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.75rem',
+      padding: '0.75rem 1rem',
+      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+      border: '1px solid rgba(239, 68, 68, 0.3)',
+      borderRadius: '8px',
       marginBottom: '1rem',
+      color: '#fca5a5',
+      fontSize: '0.875rem'
+    },
+    descriptionSection: {
+      marginBottom: '1.5rem'
+    },
+    sectionTitle: {
+      fontSize: '1rem',
+      fontWeight: '600',
+      color: 'white',
+      marginBottom: '0.75rem',
       display: 'flex',
       alignItems: 'center',
       gap: '0.5rem'
@@ -246,41 +270,55 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
     description: {
       color: '#d1d5db',
       lineHeight: '1.6',
-      marginBottom: '1rem'
-    },
-    codeEditor: {
-      width: '100%',
-      minHeight: '300px',
       padding: '1rem',
-      backgroundColor: 'rgba(0, 0, 0, 0.4)',
-      border: '1px solid rgba(255, 255, 255, 0.1)',
+      backgroundColor: 'rgba(55, 65, 81, 0.3)',
       borderRadius: '8px',
-      color: 'white',
-      fontFamily: 'monospace',
-      fontSize: '0.875rem',
-      resize: 'vertical'
+      border: '1px solid rgba(255, 255, 255, 0.1)'
     },
-    hintSection: {
-      marginBottom: '2rem'
+    hintsSection: {
+      marginBottom: '1.5rem'
     },
-    hintToggle: {
+    hintsButton: {
       background: 'transparent',
-      border: 'none',
-      color: '#60a5fa',
+      border: '1px solid rgba(251, 191, 36, 0.3)',
+      color: '#fbbf24',
+      padding: '0.5rem 1rem',
+      borderRadius: '8px',
       cursor: 'pointer',
       display: 'flex',
       alignItems: 'center',
       gap: '0.5rem',
       fontSize: '0.875rem',
-      fontWeight: '600',
-      marginBottom: '1rem'
+      fontWeight: '500',
+      width: '100%',
+      justifyContent: 'space-between',
+      transition: 'all 0.2s',
+      marginBottom: '0.75rem'
     },
-    hintContent: {
+    hintsContent: {
       padding: '1rem',
-      backgroundColor: 'rgba(59, 130, 246, 0.1)',
-      border: '1px solid rgba(59, 130, 246, 0.2)',
+      backgroundColor: 'rgba(251, 191, 36, 0.1)',
       borderRadius: '8px',
-      color: '#d1d5db'
+      border: '1px solid rgba(251, 191, 36, 0.2)',
+      color: '#fcd34d',
+      fontSize: '0.875rem',
+      lineHeight: '1.6'
+    },
+    codeSection: {
+      marginBottom: '1.5rem'
+    },
+    codeEditor: {
+      width: '100%',
+      minHeight: '300px',
+      padding: '1rem',
+      backgroundColor: '#0f1116',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      borderRadius: '8px',
+      color: 'white',
+      fontSize: '0.875rem',
+      fontFamily: '"Fira Code", "Consolas", "Monaco", monospace',
+      resize: 'vertical',
+      lineHeight: '1.5'
     },
     actionButtons: {
       display: 'flex',
@@ -290,28 +328,41 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
     button: {
       padding: '0.75rem 2rem',
       borderRadius: '8px',
+      border: 'none',
       fontSize: '1rem',
       fontWeight: '600',
       cursor: 'pointer',
-      transition: 'all 0.2s',
-      border: 'none',
       display: 'flex',
       alignItems: 'center',
-      gap: '0.5rem'
+      gap: '0.5rem',
+      transition: 'all 0.2s'
     },
     primaryButton: {
-      background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+      backgroundColor: '#3b82f6',
       color: 'white'
     },
     secondaryButton: {
       backgroundColor: 'rgba(255, 255, 255, 0.1)',
-      color: 'white'
+      color: 'white',
+      border: '1px solid rgba(255, 255, 255, 0.2)'
     },
-    warningBanner: {
-      backgroundColor: 'rgba(239, 68, 68, 0.2)',
-      border: '1px solid rgba(239, 68, 68, 0.4)',
-      borderRadius: '8px',
+    loadingContainer: {
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '3rem',
+      gap: '1rem'
+    },
+    loadingText: {
+      color: '#9ca3af',
+      fontSize: '1.125rem'
+    },
+    errorBanner: {
       padding: '1rem',
+      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+      border: '1px solid rgba(239, 68, 68, 0.3)',
+      borderRadius: '8px',
       marginBottom: '1rem',
       color: '#fca5a5',
       display: 'flex',
@@ -324,126 +375,97 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
     return (
       <div style={styles.overlay}>
         <div style={styles.modal}>
-          <div style={{ ...styles.content, textAlign: 'center', padding: '3rem' }}>
-            <div className="global-loading-spinner" style={{ margin: '0 auto 1rem' }} />
-            <p style={{ color: '#9ca3af' }}>Loading challenge...</p>
+          <div style={styles.loadingContainer}>
+            <Code2 size={48} color="#3b82f6" />
+            <p style={styles.loadingText}>Loading assessment...</p>
           </div>
         </div>
       </div>
     );
   }
-
-  if (error || !challenge) {
-    return (
-      <div style={styles.overlay}>
-        <div style={styles.modal}>
-          <div style={{ ...styles.content, textAlign: 'center', padding: '3rem' }}>
-            <AlertTriangle size={48} color="#ef4444" style={{ margin: '0 auto 1rem' }} />
-            <h3 style={{ color: 'white', marginBottom: '1rem' }}>Error Loading Challenge</h3>
-            <p style={{ color: '#9ca3af', marginBottom: '2rem' }}>{error || 'Challenge not available'}</p>
-            <button onClick={onClose} style={{ ...styles.button, ...styles.secondaryButton }}>
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const getDifficultyColor = (level) => {
-    const colors = {
-      easy: '#10b981',
-      medium: '#f59e0b',
-      hard: '#ef4444',
-      expert: '#8b5cf6'
-    };
-    return colors[level] || '#9ca3af';
-  };
 
   return (
     <div style={styles.overlay}>
       <div style={styles.modal}>
         <div style={styles.header}>
-          <div>
-            <h2 style={styles.title}>Pre-Assessment: {language.name}</h2>
-            <p style={styles.subtitle}>Complete this challenge to assess your skill level</p>
+          <div style={styles.headerContent}>
+            <Code2 size={24} color="#3b82f6" />
+            <div>
+              <h2 style={styles.title}>Pre-Assessment Challenge</h2>
+              <p style={styles.subtitle}>{language.name} Assessment</p>
+            </div>
           </div>
-          <button onClick={onClose} style={styles.closeButton}>×</button>
+          <button onClick={onClose} style={styles.closeButton}>
+            ×
+          </button>
         </div>
 
         <div style={styles.content}>
-          {/* Tab Warning */}
-          {showTabWarning && (
-            <div style={styles.warningBanner}>
+          {error && (
+            <div style={styles.errorBanner}>
               <AlertTriangle size={20} />
-              <div>
-                <strong>Warning:</strong> Tab switching detected! ({tabSwitchCount}/{MAX_TAB_SWITCHES})
-                <br />
-                <small>Further tab switches will result in automatic failure.</small>
-              </div>
+              {error}
             </div>
           )}
 
-          {/* Info Cards */}
-          <div style={styles.infoGrid}>
-            <div style={styles.infoCard}>
-              <div style={styles.infoLabel}>Difficulty</div>
-              <div style={{ ...styles.infoValue, color: getDifficultyColor(challenge.difficulty_level) }}>
-                {challenge.difficulty_level?.toUpperCase()}
-              </div>
+          {showTabWarning && (
+            <div style={styles.warningBanner}>
+              <AlertTriangle size={20} />
+              Warning: Tab switching detected! ({MAX_TAB_SWITCHES - tabSwitchCount} warnings remaining)
             </div>
-            <div style={styles.infoCard}>
-              <div style={styles.infoLabel}>Time Limit</div>
-              <div style={styles.infoValue}>
-                {startedAt ? (
-                  <span style={{ color: timeRemaining < 60 ? '#ef4444' : '#60a5fa' }}>
-                    <Clock size={20} style={{ display: 'inline', marginRight: '0.5rem' }} />
-                    {formatTime(timeRemaining)}
-                  </span>
-                ) : (
-                  `${challenge.time_limit_minutes} min`
-                )}
-              </div>
-            </div>
-            <div style={styles.infoCard}>
-              <div style={styles.infoLabel}>Language</div>
-              <div style={styles.infoValue}>{language.name}</div>
-            </div>
-          </div>
+          )}
 
-          {/* Challenge Description */}
-          <div style={styles.section}>
+          {startedAt && timeRemaining !== null && (
+            <div style={styles.timerSection}>
+              <div style={styles.timer}>
+                <Clock size={20} />
+                Time Remaining: {formatTime(timeRemaining)}
+              </div>
+              {timeRemaining < 60 && (
+                <span style={{ color: '#ef4444', fontSize: '0.875rem', fontWeight: '600' }}>
+                  Hurry up!
+                </span>
+              )}
+            </div>
+          )}
+
+          <div style={styles.descriptionSection}>
             <h3 style={styles.sectionTitle}>
-              <Code2 size={20} />
-              Challenge: {challenge.title}
+              <Code2 size={18} />
+              Challenge Description
             </h3>
-            <p style={styles.description}>{challenge.description}</p>
+            <div style={styles.description}>
+              {challenge?.description || 'No description available'}
+            </div>
           </div>
 
-          {/* Hints */}
-          <div style={styles.hintSection}>
-            <button onClick={() => setShowHints(!showHints)} style={styles.hintToggle}>
-              <Lightbulb size={16} />
-              {showHints ? 'Hide' : 'Show'} Hints
-              {showHints ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
-            {showHints && (
-              <div style={styles.hintContent}>
-                <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                  <li>Read the requirements carefully</li>
-                  <li>Test your solution with the provided examples</li>
-                  <li>Use appropriate variable names</li>
-                  <li>Add comments to explain your approach</li>
-                  <li>Make sure your code handles all edge cases</li>
-                </ul>
-              </div>
-            )}
-          </div>
+          {challenge?.test_cases && (
+            <div style={styles.hintsSection}>
+              <button
+                onClick={() => setShowHints(!showHints)}
+                style={styles.hintsButton}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Lightbulb size={18} />
+                  View Hints
+                </div>
+                {showHints ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </button>
+              
+              {showHints && (
+                <div style={styles.hintsContent}>
+                  <p><strong>Hint:</strong> Make sure your solution handles edge cases and follows best practices.</p>
+                  {challenge.test_cases && typeof challenge.test_cases === 'string' && (
+                    <p style={{ marginTop: '0.5rem' }}>Test cases are available to help guide your solution.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
-          {/* Code Editor */}
-          <div style={styles.section}>
+          <div style={styles.codeSection}>
             <h3 style={styles.sectionTitle}>
-              <Code2 size={20} />
+              <Code2 size={18} />
               Your Solution
             </h3>
             <textarea
@@ -459,7 +481,6 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
             />
           </div>
 
-          {/* Action Buttons */}
           <div style={styles.actionButtons}>
             {!startedAt ? (
               <button
