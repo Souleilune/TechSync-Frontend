@@ -1,5 +1,5 @@
 // src/pages/Onboarding.js
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { onboardingService } from '../services/onboardingService';
@@ -15,12 +15,19 @@ import {
   Zap,
   Radio,
   ChevronRight,
-  Trophy
+  Trophy,
+  Star,
+  Award,
+  Flame,
+  Crown,
+  Rocket,
+  Heart,
+  Coffee
 } from 'lucide-react';
 import PreAssessmentModal from '../components/PreAssessmentModal';
 import AssessmentResultModal from '../components/AssessmentResultModal';
 
-// Isolated background styles - never changes
+// Isolated background styles
 const backgroundStyles = {
   backgroundLayer: {
     position: 'fixed',
@@ -45,7 +52,44 @@ const backgroundStyles = {
   }
 };
 
-// Completely isolated background component
+// Floating Particles Component
+const FloatingParticles = React.memo(() => {
+  const particles = Array.from({ length: 30 }, (_, i) => ({
+    id: i,
+    left: `${Math.random() * 100}%`,
+    top: `${Math.random() * 100}%`,
+    size: Math.random() * 4 + 2,
+    delay: Math.random() * 5,
+    duration: Math.random() * 10 + 10,
+    color: ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b'][Math.floor(Math.random() * 4)]
+  }));
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 2 }}>
+      {particles.map(p => (
+        <div
+          key={p.id}
+          className="floating-particle"
+          style={{
+            position: 'absolute',
+            left: p.left,
+            top: p.top,
+            width: p.size,
+            height: p.size,
+            backgroundColor: p.color,
+            borderRadius: '50%',
+            opacity: 0.6,
+            boxShadow: `0 0 ${p.size * 2}px ${p.color}`,
+            animationDelay: `${p.delay}s`,
+            animationDuration: `${p.duration}s`
+          }}
+        />
+      ))}
+    </div>
+  );
+});
+
+// Animated Background Component
 const IsolatedAnimatedBackground = React.memo(() => (
   <div style={backgroundStyles.backgroundLayer}>
     <div style={backgroundStyles.figmaBackground}>
@@ -77,19 +121,149 @@ const IsolatedAnimatedBackground = React.memo(() => (
   </div>
 ));
 
-// Step icons mapping
-const stepIcons = {
-  1: Code2,
-  2: BookOpen,
-  3: Clock,
-  4: Target
+// Step icons and labels
+const stepIcons = { 1: Code2, 2: BookOpen, 3: Clock, 4: Target };
+const stepLabels = { 1: 'Skills', 2: 'Interests', 3: 'Level', 4: 'Challenge' };
+const stepEmojis = { 1: '💻', 2: '🎯', 3: '⚡', 4: '🏆' };
+
+// Achievement Toast Component
+const AchievementToast = ({ show, message, icon: Icon }) => {
+  if (!show) return null;
+  
+  return (
+    <div className="achievement-toast" style={{
+      position: 'fixed',
+      top: '100px',
+      right: '30px',
+      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.95), rgba(5, 150, 105, 0.9))',
+      padding: '16px 24px',
+      borderRadius: '16px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      boxShadow: '0 10px 40px rgba(16, 185, 129, 0.4), 0 0 60px rgba(16, 185, 129, 0.2)',
+      border: '1px solid rgba(255, 255, 255, 0.2)',
+      zIndex: 1000
+    }}>
+      <div style={{
+        width: '40px',
+        height: '40px',
+        borderRadius: '10px',
+        background: 'rgba(255, 255, 255, 0.2)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <Icon size={22} color="white" />
+      </div>
+      <div>
+        <div style={{ fontSize: '10px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+          Achievement Unlocked!
+        </div>
+        <div style={{ fontSize: '14px', fontWeight: '600', color: 'white' }}>
+          {message}
+        </div>
+      </div>
+    </div>
+  );
 };
 
-const stepLabels = {
-  1: 'Languages',
-  2: 'Topics',
-  3: 'Experience',
-  4: 'Assessment'
+// XP Bar Component
+const XPBar = ({ currentStep, totalSteps }) => {
+  const xpPerStep = 250;
+  const currentXP = (currentStep - 1) * xpPerStep;
+  const totalXP = totalSteps * xpPerStep;
+  const percentage = (currentXP / totalXP) * 100;
+  
+  return (
+    <div style={{
+      position: 'fixed',
+      top: '30px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      padding: '10px 20px',
+      background: 'rgba(15, 17, 22, 0.95)',
+      borderRadius: '30px',
+      border: '1px solid rgba(59, 130, 246, 0.3)',
+      zIndex: 50,
+      backdropFilter: 'blur(20px)'
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px'
+      }}>
+        <Star size={16} color="#fbbf24" fill="#fbbf24" />
+        <span style={{ fontSize: '12px', fontWeight: '700', color: '#fbbf24' }}>
+          {currentXP} XP
+        </span>
+      </div>
+      <div style={{
+        width: '120px',
+        height: '8px',
+        background: 'rgba(255, 255, 255, 0.1)',
+        borderRadius: '4px',
+        overflow: 'hidden',
+        position: 'relative'
+      }}>
+        <div className="xp-fill" style={{
+          width: `${percentage}%`,
+          height: '100%',
+          background: 'linear-gradient(90deg, #fbbf24, #f59e0b)',
+          borderRadius: '4px',
+          transition: 'width 0.5s ease',
+          boxShadow: '0 0 10px rgba(251, 191, 36, 0.5)'
+        }} />
+        <div className="xp-shimmer" style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
+          backgroundSize: '200% 100%'
+        }} />
+      </div>
+      <span style={{ fontSize: '11px', color: '#64748b' }}>
+        Level {currentStep}
+      </span>
+    </div>
+  );
+};
+
+// Combo Counter Component
+const ComboCounter = ({ count }) => {
+  if (count < 2) return null;
+  
+  return (
+    <div className="combo-counter" style={{
+      position: 'fixed',
+      bottom: '100px',
+      right: '30px',
+      padding: '12px 20px',
+      background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.9), rgba(124, 58, 237, 0.85))',
+      borderRadius: '14px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      boxShadow: '0 8px 30px rgba(139, 92, 246, 0.4)',
+      zIndex: 100,
+      border: '1px solid rgba(255, 255, 255, 0.2)'
+    }}>
+      <Flame size={20} color="#fbbf24" className="flame-icon" />
+      <div>
+        <div style={{ fontSize: '20px', fontWeight: '800', color: 'white' }}>
+          {count}x
+        </div>
+        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+          Combo!
+        </div>
+      </div>
+    </div>
+  );
 };
 
 function Onboarding() {
@@ -102,6 +276,10 @@ function Onboarding() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [showAchievement, setShowAchievement] = useState(false);
+  const [achievementMessage, setAchievementMessage] = useState('');
+  const [selectionCombo, setSelectionCombo] = useState(0);
+  const [lastSelectionTime, setLastSelectionTime] = useState(0);
 
   // Data states
   const [programmingLanguages, setProgrammingLanguages] = useState([]);
@@ -151,6 +329,34 @@ function Onboarding() {
     loadInitialData();
   }, []);
 
+  // Combo system
+  const updateCombo = useCallback(() => {
+    const now = Date.now();
+    if (now - lastSelectionTime < 1500) {
+      setSelectionCombo(prev => prev + 1);
+    } else {
+      setSelectionCombo(1);
+    }
+    setLastSelectionTime(now);
+  }, [lastSelectionTime]);
+
+  // Reset combo after inactivity
+  useEffect(() => {
+    if (selectionCombo > 0) {
+      const timer = setTimeout(() => {
+        setSelectionCombo(0);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [selectionCombo, lastSelectionTime]);
+
+  // Show achievement
+  const triggerAchievement = (message) => {
+    setAchievementMessage(message);
+    setShowAchievement(true);
+    setTimeout(() => setShowAchievement(false), 3000);
+  };
+
   // Handle language selection
   const handleLanguageToggle = (language) => {
     const isSelected = selectedLanguages.find(l => l.language_id === language.id);
@@ -163,6 +369,15 @@ function Onboarding() {
         name: language.name,
         proficiency_level: 'beginner'
       }]);
+      updateCombo();
+      
+      // Achievement triggers
+      if (selectedLanguages.length === 2) {
+        triggerAchievement('Polyglot: 3 Languages Selected!');
+      }
+      if (selectedLanguages.length === 4) {
+        triggerAchievement('Code Master: 5 Languages!');
+      }
     }
   };
 
@@ -179,6 +394,11 @@ function Onboarding() {
         interest_level: 'high',
         experience_level: 'beginner'
       }]);
+      updateCombo();
+      
+      if (selectedTopics.length === 2) {
+        triggerAchievement('Curious Mind: 3 Topics!');
+      }
     }
   };
 
@@ -197,10 +417,10 @@ function Onboarding() {
     } else {
       setAllChallengesComplete(true);
       setShowResultModal(true);
+      triggerAchievement('Challenge Complete!');
     }
   };
 
-  // Determine proficiency level based on score
   const determineProficiencyLevel = (score) => {
     if (score >= 90) return 'expert';
     if (score >= 75) return 'advanced';
@@ -208,7 +428,6 @@ function Onboarding() {
     return 'beginner';
   };
 
-  // Complete onboarding with assessment results
   const handleCompleteOnboarding = async () => {
     try {
       setLoading(true);
@@ -236,6 +455,7 @@ function Onboarding() {
 
       if (result.success) {
         setSuccessMessage('Onboarding completed successfully!');
+        triggerAchievement('Welcome to TechSync!');
         
         if (result.data?.user) {
           await updateUser(result.data.user, true);
@@ -245,22 +465,19 @@ function Onboarding() {
         
         setTimeout(() => {
           navigate('/');
-        }, 1500);
+        }, 2000);
       } else {
-        const errorMsg = result.message || 'Failed to complete onboarding. Please try again.';
-        setError(errorMsg);
+        setError(result.message || 'Failed to complete onboarding.');
       }
 
     } catch (error) {
-      const errorMessage = error.message || 'Failed to complete onboarding. Please try again.';
       console.error('Complete onboarding error:', error);
-      setError(errorMessage);
+      setError(error.message || 'Failed to complete onboarding.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle step navigation
   const handleNextStep = () => {
     setError('');
     
@@ -274,6 +491,7 @@ function Onboarding() {
       return;
     }
 
+    triggerAchievement(`Step ${currentStep} Complete!`);
     setCurrentStep(currentStep + 1);
   };
 
@@ -282,11 +500,11 @@ function Onboarding() {
   };
 
   const getExperienceLevel = (years) => {
-    if (years === 0) return { label: 'Newcomer', color: '#10b981', icon: '🌱' };
-    if (years <= 2) return { label: 'Junior', color: '#3b82f6', icon: '⚡' };
-    if (years <= 5) return { label: 'Intermediate', color: '#8b5cf6', icon: '🔥' };
-    if (years <= 10) return { label: 'Senior', color: '#f59e0b', icon: '⭐' };
-    return { label: 'Expert', color: '#ef4444', icon: '👑' };
+    if (years === 0) return { label: 'Newcomer', color: '#10b981', icon: Rocket, emoji: '🌱', rank: 'D' };
+    if (years <= 2) return { label: 'Apprentice', color: '#3b82f6', icon: Zap, emoji: '⚡', rank: 'C' };
+    if (years <= 5) return { label: 'Developer', color: '#8b5cf6', icon: Flame, emoji: '🔥', rank: 'B' };
+    if (years <= 10) return { label: 'Veteran', color: '#f59e0b', icon: Star, emoji: '⭐', rank: 'A' };
+    return { label: 'Legend', color: '#ef4444', icon: Crown, emoji: '👑', rank: 'S' };
   };
 
   const styles = useMemo(() => ({
@@ -317,8 +535,8 @@ function Onboarding() {
     },
     cornerAccent: {
       position: 'fixed',
-      width: '100px',
-      height: '100px',
+      width: '120px',
+      height: '120px',
       pointerEvents: 'none',
       zIndex: 3
     },
@@ -327,15 +545,26 @@ function Onboarding() {
       zIndex: 10,
       maxWidth: '900px',
       width: '100%',
-      padding: '1rem'
+      padding: '1rem',
+      marginTop: '60px'
     },
     mainCard: {
       position: 'relative',
-      background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.8) 0%, rgba(7, 11, 20, 0.9) 100%)',
-      borderRadius: '24px',
-      border: '1px solid rgba(59, 130, 246, 0.15)',
+      background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.85) 0%, rgba(7, 11, 20, 0.95) 100%)',
+      borderRadius: '28px',
+      border: '1px solid rgba(59, 130, 246, 0.2)',
       padding: '2.5rem',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      backdropFilter: 'blur(20px)'
+    },
+    cardInnerGlow: {
+      position: 'absolute',
+      top: '-50%',
+      left: '-50%',
+      width: '200%',
+      height: '200%',
+      background: 'radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.08) 0%, transparent 50%)',
+      pointerEvents: 'none'
     },
     cardGridOverlay: {
       position: 'absolute',
@@ -347,9 +576,10 @@ function Onboarding() {
         linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),
         linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px)
       `,
-      backgroundSize: '30px 30px',
+      backgroundSize: '25px 25px',
       pointerEvents: 'none',
-      borderRadius: '24px'
+      borderRadius: '28px',
+      opacity: 0.5
     },
     scanLine: {
       position: 'absolute',
@@ -357,9 +587,19 @@ function Onboarding() {
       left: 0,
       right: 0,
       height: '2px',
-      background: 'linear-gradient(90deg, transparent, #3b82f6, #8b5cf6, transparent)',
-      boxShadow: '0 0 15px #3b82f6',
+      background: 'linear-gradient(90deg, transparent, #3b82f6, #8b5cf6, #3b82f6, transparent)',
+      boxShadow: '0 0 20px #3b82f6, 0 0 40px #3b82f6',
       zIndex: 2
+    },
+    glowOrbs: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      pointerEvents: 'none',
+      overflow: 'hidden',
+      borderRadius: '28px'
     },
     header: {
       textAlign: 'center',
@@ -368,15 +608,18 @@ function Onboarding() {
       zIndex: 3
     },
     hexagonContainer: {
+      position: 'relative',
+      width: '140px',
+      height: '140px',
+      margin: '0 auto 1.5rem',
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: '1.5rem'
+      justifyContent: 'center'
     },
     hexagonBadge: {
       position: 'relative',
-      width: '70px',
-      height: '80px',
+      width: '90px',
+      height: '104px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center'
@@ -395,28 +638,61 @@ function Onboarding() {
       alignItems: 'center',
       justifyContent: 'center'
     },
+    orbitRing: {
+      position: 'absolute',
+      top: '50%',
+      left: '50%',
+      width: '130px',
+      height: '130px',
+      transform: 'translate(-50%, -50%)',
+      borderRadius: '50%',
+      border: '1px dashed rgba(59, 130, 246, 0.3)',
+      pointerEvents: 'none'
+    },
+    orbitDot: {
+      position: 'absolute',
+      width: '8px',
+      height: '8px',
+      backgroundColor: '#3b82f6',
+      borderRadius: '50%',
+      top: '50%',
+      left: '50%',
+      marginTop: '-4px',
+      marginLeft: '-4px',
+      boxShadow: '0 0 12px #3b82f6'
+    },
     statusBadge: {
       display: 'inline-flex',
       alignItems: 'center',
-      gap: '6px',
-      padding: '6px 14px',
+      gap: '8px',
+      padding: '8px 18px',
       backgroundColor: 'rgba(16, 185, 129, 0.15)',
       border: '1px solid rgba(16, 185, 129, 0.3)',
-      borderRadius: '20px',
+      borderRadius: '25px',
       fontSize: '11px',
-      fontWeight: '600',
+      fontWeight: '700',
       color: '#10b981',
       textTransform: 'uppercase',
-      letterSpacing: '1px',
-      marginBottom: '1rem'
+      letterSpacing: '2px',
+      marginBottom: '1rem',
+      boxShadow: '0 0 20px rgba(16, 185, 129, 0.2)'
+    },
+    pulseDot: {
+      width: '8px',
+      height: '8px',
+      backgroundColor: '#10b981',
+      borderRadius: '50%',
+      boxShadow: '0 0 8px #10b981'
     },
     title: {
-      fontSize: '2rem',
+      fontSize: '2.25rem',
       fontWeight: '800',
       color: 'white',
-      marginBottom: '0.75rem',
-      letterSpacing: '-0.025em',
-      background: 'linear-gradient(135deg, #ffffff 0%, #94a3b8 100%)',
+      marginBottom: '0.5rem',
+      letterSpacing: '-0.025em'
+    },
+    titleGradient: {
+      background: 'linear-gradient(135deg, #ffffff 0%, #60a5fa 50%, #a78bfa 100%)',
       WebkitBackgroundClip: 'text',
       WebkitTextFillColor: 'transparent',
       backgroundClip: 'text'
@@ -427,76 +703,85 @@ function Onboarding() {
       marginBottom: '0',
       fontWeight: '400'
     },
-    // Styles for minimal clean stepper
-progressContainer: {
-  marginBottom: '2.5rem',
-  position: 'relative',
-  zIndex: 3
-},
-stepperContainer: {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  maxWidth: '480px',
-  margin: '0 auto',
-  padding: '0 20px'
-},
-stepperLine: {
-  flex: 1,
-  height: '2px',
-  background: 'rgba(255, 255, 255, 0.1)',
-  position: 'relative',
-  margin: '0 -1px'
-},
-stepperLineFilled: {
-  background: 'linear-gradient(90deg, #10b981, #22c55e)',
-  boxShadow: '0 0 8px rgba(16, 185, 129, 0.4)'
-},
-stepperNode: {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: '8px',
-  position: 'relative',
-  zIndex: 2
-},
-stepperCircle: {
-  width: '44px',
-  height: '44px',
-  borderRadius: '12px',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: '#0f1116',
-  border: '2px solid rgba(255, 255, 255, 0.15)',
-  color: '#64748b',
-  transition: 'all 0.3s ease'
-},
-stepperCircleActive: {
-  border: '2px solid #3b82f6',
-  color: '#3b82f6',
-  background: 'rgba(59, 130, 246, 0.1)',
-  boxShadow: '0 0 20px rgba(59, 130, 246, 0.3)'
-},
-stepperCircleComplete: {
-  border: '2px solid #10b981',
-  color: '#10b981',
-  background: 'rgba(16, 185, 129, 0.1)'
-},
-stepperLabel: {
-  fontSize: '10px',
-  fontWeight: '600',
-  color: '#64748b',
-  textTransform: 'uppercase',
-  letterSpacing: '0.5px',
-  textAlign: 'center'
-},
-stepperLabelActive: {
-  color: '#3b82f6'
-},
-stepperLabelComplete: {
-  color: '#10b981'
-},
+    progressContainer: {
+      marginBottom: '2.5rem',
+      position: 'relative',
+      zIndex: 3
+    },
+    stepperContainer: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      maxWidth: '500px',
+      margin: '0 auto',
+      padding: '0 20px'
+    },
+    stepperLine: {
+      flex: 1,
+      height: '3px',
+      background: 'rgba(255, 255, 255, 0.1)',
+      position: 'relative',
+      margin: '0 -1px',
+      borderRadius: '2px'
+    },
+    stepperLineFilled: {
+      background: 'linear-gradient(90deg, #10b981, #3b82f6)',
+      boxShadow: '0 0 12px rgba(59, 130, 246, 0.5)'
+    },
+    stepperNode: {
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: '10px',
+      position: 'relative',
+      zIndex: 2
+    },
+    stepperCircle: {
+      width: '56px',
+      height: '56px',
+      borderRadius: '16px',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '2px',
+      background: 'rgba(15, 23, 42, 0.95)',
+      border: '2px solid rgba(255, 255, 255, 0.1)',
+      color: '#64748b',
+      transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+      position: 'relative',
+      overflow: 'hidden'
+    },
+    stepperCircleActive: {
+      border: '2px solid #3b82f6',
+      color: '#3b82f6',
+      background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.1))',
+      boxShadow: '0 0 30px rgba(59, 130, 246, 0.4), inset 0 0 20px rgba(59, 130, 246, 0.1)',
+      transform: 'scale(1.1)'
+    },
+    stepperCircleComplete: {
+      border: '2px solid #10b981',
+      color: '#10b981',
+      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.1))',
+      boxShadow: '0 0 20px rgba(16, 185, 129, 0.3)'
+    },
+    stepEmoji: {
+      fontSize: '10px'
+    },
+    stepperLabel: {
+      fontSize: '11px',
+      fontWeight: '700',
+      color: '#64748b',
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px',
+      textAlign: 'center'
+    },
+    stepperLabelActive: {
+      color: '#3b82f6'
+    },
+    stepperLabelComplete: {
+      color: '#10b981'
+    },
     stepContainer: {
       marginBottom: '2rem',
       textAlign: 'center',
@@ -509,22 +794,32 @@ stepperLabelComplete: {
     stepBadge: {
       display: 'inline-flex',
       alignItems: 'center',
-      gap: '8px',
-      padding: '8px 16px',
-      backgroundColor: 'rgba(59, 130, 246, 0.1)',
-      border: '1px solid rgba(59, 130, 246, 0.2)',
-      borderRadius: '12px',
-      marginBottom: '1rem'
+      gap: '10px',
+      padding: '10px 20px',
+      background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.1))',
+      border: '1px solid rgba(59, 130, 246, 0.3)',
+      borderRadius: '14px',
+      marginBottom: '1rem',
+      boxShadow: '0 4px 15px rgba(59, 130, 246, 0.1)'
+    },
+    stepBadgeIcon: {
+      width: '28px',
+      height: '28px',
+      borderRadius: '8px',
+      background: 'rgba(59, 130, 246, 0.2)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
     },
     stepBadgeText: {
       fontSize: '12px',
-      fontWeight: '600',
-      color: '#3b82f6',
+      fontWeight: '700',
+      color: '#93c5fd',
       textTransform: 'uppercase',
       letterSpacing: '1px'
     },
     stepTitle: {
-      fontSize: '1.5rem',
+      fontSize: '1.6rem',
       fontWeight: '700',
       color: 'white',
       marginBottom: '0.75rem',
@@ -539,56 +834,68 @@ stepperLabelComplete: {
       display: 'flex',
       flexWrap: 'wrap',
       justifyContent: 'center',
-      gap: '10px',
+      gap: '12px',
       marginBottom: '1.5rem',
       width: '100%',
       margin: '0 auto 1.5rem auto'
     },
     pillButton: {
-      padding: '12px 20px',
-      border: '1px solid rgba(255, 255, 255, 0.15)',
-      borderRadius: '12px',
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+      padding: '14px 24px',
+      border: '2px solid rgba(255, 255, 255, 0.1)',
+      borderRadius: '14px',
+      backgroundColor: 'rgba(255, 255, 255, 0.03)',
       color: '#94a3b8',
       cursor: 'pointer',
-      transition: 'all 0.3s ease',
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
       fontSize: '14px',
       fontWeight: '600',
       textAlign: 'center',
       flex: '0 0 auto',
       whiteSpace: 'nowrap',
-      backdropFilter: 'blur(8px)'
+      backdropFilter: 'blur(8px)',
+      position: 'relative',
+      overflow: 'hidden'
     },
     selectedPillButton: {
-      background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.15))',
-      border: '1px solid rgba(59, 130, 246, 0.5)',
+      background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(139, 92, 246, 0.2))',
+      border: '2px solid rgba(59, 130, 246, 0.6)',
       color: '#93c5fd',
-      boxShadow: '0 0 20px rgba(59, 130, 246, 0.2)',
-      transform: 'scale(1.02)'
+      boxShadow: '0 0 25px rgba(59, 130, 246, 0.3), inset 0 0 20px rgba(59, 130, 246, 0.1)',
+      transform: 'scale(1.05)'
     },
     selectionCount: {
       display: 'inline-flex',
       alignItems: 'center',
-      gap: '8px',
+      gap: '10px',
       textAlign: 'center',
       color: '#3b82f6',
       fontSize: '14px',
-      fontWeight: '600',
-      padding: '12px 24px',
-      background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.05))',
-      borderRadius: '12px',
-      border: '1px solid rgba(59, 130, 246, 0.2)',
-      marginTop: '1rem'
+      fontWeight: '700',
+      padding: '14px 28px',
+      background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.1))',
+      borderRadius: '16px',
+      border: '1px solid rgba(59, 130, 246, 0.3)',
+      marginTop: '1rem',
+      boxShadow: '0 4px 20px rgba(59, 130, 246, 0.15)'
     },
     experienceContainer: {
-      maxWidth: '450px',
+      maxWidth: '480px',
       margin: '2rem auto',
-      padding: '2rem',
-      background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.8) 0%, rgba(7, 11, 20, 0.9) 100%)',
+      padding: '2.5rem',
+      background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(7, 11, 20, 0.95) 100%)',
       border: '1px solid rgba(59, 130, 246, 0.2)',
-      borderRadius: '20px',
+      borderRadius: '24px',
       position: 'relative',
       overflow: 'hidden'
+    },
+    experienceInnerGlow: {
+      position: 'absolute',
+      top: '-100%',
+      left: '-100%',
+      width: '300%',
+      height: '300%',
+      background: 'radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.1) 0%, transparent 40%)',
+      pointerEvents: 'none'
     },
     experienceHeader: {
       display: 'flex',
@@ -597,35 +904,28 @@ stepperLabelComplete: {
       gap: '12px',
       marginBottom: '1.5rem'
     },
-    experienceIconContainer: {
-      width: '48px',
-      height: '48px',
-      borderRadius: '12px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      border: '1px solid'
-    },
     experienceInputContainer: {
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      gap: '1rem'
+      gap: '1.5rem',
+      position: 'relative',
+      zIndex: 2
     },
     experienceInputWrapper: {
       position: 'relative',
       display: 'flex',
       alignItems: 'center',
-      gap: '12px'
+      gap: '16px'
     },
     experienceButton: {
-      width: '44px',
-      height: '44px',
-      borderRadius: '12px',
-      border: '1px solid rgba(255, 255, 255, 0.15)',
+      width: '52px',
+      height: '52px',
+      borderRadius: '14px',
+      border: '2px solid rgba(255, 255, 255, 0.15)',
       background: 'rgba(255, 255, 255, 0.05)',
       color: '#94a3b8',
-      fontSize: '20px',
+      fontSize: '24px',
       fontWeight: '600',
       cursor: 'pointer',
       display: 'flex',
@@ -634,18 +934,38 @@ stepperLabelComplete: {
       transition: 'all 0.3s ease'
     },
     experienceInput: {
-      fontSize: '2.5rem',
+      fontSize: '3.5rem',
       padding: '0.5rem 1rem',
       background: 'transparent',
       border: 'none',
-      borderBottom: '2px solid rgba(59, 130, 246, 0.3)',
+      borderBottom: '3px solid rgba(59, 130, 246, 0.4)',
       textAlign: 'center',
-      width: '120px',
+      width: '140px',
       color: 'white',
       fontWeight: '800',
       fontFamily: 'monospace',
       transition: 'all 0.3s ease',
       outline: 'none'
+    },
+    experienceRankContainer: {
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: '12px'
+    },
+    experienceRankBadge: {
+      width: '64px',
+      height: '64px',
+      borderRadius: '50%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '28px',
+      fontWeight: '900',
+      fontFamily: 'monospace',
+      border: '3px solid',
+      transition: 'all 0.4s ease',
+      position: 'relative'
     },
     experienceLevelBadge: {
       display: 'inline-flex',
@@ -654,9 +974,9 @@ stepperLabelComplete: {
       padding: '10px 20px',
       borderRadius: '12px',
       fontSize: '14px',
-      fontWeight: '600',
-      marginTop: '0.5rem',
-      border: '1px solid'
+      fontWeight: '700',
+      border: '1px solid',
+      transition: 'all 0.3s ease'
     },
     experienceText: {
       fontSize: '14px',
@@ -673,32 +993,32 @@ stepperLabelComplete: {
       zIndex: 3
     },
     navButton: {
-      padding: '14px 32px',
+      padding: '16px 36px',
       border: 'none',
-      borderRadius: '14px',
+      borderRadius: '16px',
       cursor: 'pointer',
       fontSize: '15px',
       fontWeight: '700',
-      transition: 'all 0.3s ease',
-      minWidth: '160px',
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      minWidth: '180px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       gap: '10px',
       textTransform: 'uppercase',
-      letterSpacing: '0.5px',
+      letterSpacing: '1px',
       position: 'relative',
       overflow: 'hidden'
     },
     primaryButton: {
       background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
       color: 'white',
-      boxShadow: '0 4px 20px rgba(16, 185, 129, 0.3)'
+      boxShadow: '0 8px 30px rgba(16, 185, 129, 0.4), 0 0 40px rgba(16, 185, 129, 0.1)'
     },
     secondaryButton: {
       background: 'rgba(255, 255, 255, 0.05)',
       color: '#94a3b8',
-      border: '1px solid rgba(255, 255, 255, 0.1)'
+      border: '2px solid rgba(255, 255, 255, 0.1)'
     },
     buttonGlow: {
       position: 'absolute',
@@ -706,13 +1026,7 @@ stepperLabelComplete: {
       left: '-100%',
       width: '100%',
       height: '100%',
-      background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent)'
-    },
-    buttonDisabled: {
-      background: 'rgba(107, 114, 128, 0.3)',
-      color: '#64748b',
-      cursor: 'not-allowed',
-      boxShadow: 'none'
+      background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent)'
     },
     error: {
       display: 'flex',
@@ -723,13 +1037,14 @@ stepperLabelComplete: {
       textAlign: 'center',
       marginBottom: '1.5rem',
       padding: '1rem 1.5rem',
-      background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(185, 28, 28, 0.05))',
-      border: '1px solid rgba(239, 68, 68, 0.2)',
+      background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(185, 28, 28, 0.1))',
+      border: '1px solid rgba(239, 68, 68, 0.3)',
       borderRadius: '14px',
       fontSize: '14px',
       fontWeight: '500',
       position: 'relative',
-      zIndex: 3
+      zIndex: 3,
+      boxShadow: '0 4px 20px rgba(239, 68, 68, 0.15)'
     },
     success: {
       display: 'flex',
@@ -740,13 +1055,14 @@ stepperLabelComplete: {
       textAlign: 'center',
       marginBottom: '1.5rem',
       padding: '1rem 1.5rem',
-      background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(5, 150, 105, 0.05))',
-      border: '1px solid rgba(34, 197, 94, 0.2)',
+      background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(5, 150, 105, 0.1))',
+      border: '1px solid rgba(34, 197, 94, 0.3)',
       borderRadius: '14px',
       fontSize: '14px',
       fontWeight: '500',
       position: 'relative',
-      zIndex: 3
+      zIndex: 3,
+      boxShadow: '0 4px 20px rgba(34, 197, 94, 0.15)'
     },
     challengeContainer: {
       position: 'relative',
@@ -754,10 +1070,10 @@ stepperLabelComplete: {
     },
     backButton: {
       position: 'fixed',
-      top: '2rem',
-      left: '2rem',
+      top: '100px',
+      left: '30px',
       zIndex: 50,
-      padding: '12px 20px',
+      padding: '14px 22px',
       background: 'rgba(15, 17, 22, 0.95)',
       backdropFilter: 'blur(24px)',
       color: '#94a3b8',
@@ -772,7 +1088,7 @@ stepperLabelComplete: {
       gap: '10px',
       boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
     },
-    // Loading state styles
+    // Loading state
     loadingContainer: {
       position: 'relative',
       zIndex: 10,
@@ -782,18 +1098,18 @@ stepperLabelComplete: {
       alignItems: 'center'
     },
     loadingCard: {
-      background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.8) 0%, rgba(7, 11, 20, 0.9) 100%)',
-      borderRadius: '24px',
-      border: '1px solid rgba(59, 130, 246, 0.15)',
-      padding: '3rem',
+      background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.85) 0%, rgba(7, 11, 20, 0.95) 100%)',
+      borderRadius: '28px',
+      border: '1px solid rgba(59, 130, 246, 0.2)',
+      padding: '4rem',
       position: 'relative',
       overflow: 'hidden'
     },
     radarContainer: {
       position: 'relative',
-      width: '100px',
-      height: '100px',
-      marginBottom: '24px'
+      width: '120px',
+      height: '120px',
+      marginBottom: '28px'
     },
     radarRing: {
       position: 'absolute',
@@ -803,15 +1119,15 @@ stepperLabelComplete: {
       height: '100%',
       transform: 'translate(-50%, -50%)',
       borderRadius: '50%',
-      border: '2px solid rgba(59, 130, 246, 0.3)'
+      border: '2px solid rgba(59, 130, 246, 0.4)'
     },
     radarCenter: {
       position: 'absolute',
       top: '50%',
       left: '50%',
       transform: 'translate(-50%, -50%)',
-      width: '50px',
-      height: '50px',
+      width: '60px',
+      height: '60px',
       backgroundColor: 'rgba(15, 23, 42, 0.9)',
       borderRadius: '50%',
       display: 'flex',
@@ -822,26 +1138,20 @@ stepperLabelComplete: {
     loadingBadge: {
       display: 'inline-flex',
       alignItems: 'center',
-      gap: '8px',
-      padding: '8px 16px',
+      gap: '10px',
+      padding: '10px 20px',
       backgroundColor: 'rgba(59, 130, 246, 0.15)',
       border: '1px solid rgba(59, 130, 246, 0.3)',
-      borderRadius: '20px',
+      borderRadius: '25px',
       fontSize: '12px',
-      fontWeight: '600',
+      fontWeight: '700',
       color: '#3b82f6',
       textTransform: 'uppercase',
       letterSpacing: '2px',
-      marginBottom: '12px'
-    },
-    pulseDot: {
-      width: '8px',
-      height: '8px',
-      backgroundColor: '#3b82f6',
-      borderRadius: '50%'
+      marginBottom: '16px'
     },
     loadingTitle: {
-      fontSize: '24px',
+      fontSize: '28px',
       fontWeight: '700',
       color: 'white',
       marginBottom: '8px'
@@ -849,51 +1159,57 @@ stepperLabelComplete: {
     loadingText: {
       color: '#64748b',
       fontSize: '14px',
-      marginBottom: '24px'
+      marginBottom: '28px'
     },
     loadingProgress: {
-      width: '200px',
-      height: '4px',
+      width: '220px',
+      height: '6px',
       backgroundColor: 'rgba(255, 255, 255, 0.1)',
-      borderRadius: '2px',
+      borderRadius: '3px',
       overflow: 'hidden'
     },
     loadingProgressFill: {
-      width: '60px',
+      width: '80px',
       height: '100%',
-      background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
-      borderRadius: '2px'
+      background: 'linear-gradient(90deg, #3b82f6, #8b5cf6, #3b82f6)',
+      borderRadius: '3px',
+      backgroundSize: '200% 100%'
     }
   }), []);
 
   const hoverStyles = `
-    /* GLOBAL SYNCHRONIZED LOGO ROTATION */
+    /* ANIMATIONS */
     @keyframes globalLogoRotate {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
     
-    .global-loading-spinner {
-      animation: globalLogoRotate 2s linear infinite;
-    }
-    
     @keyframes hexPulse {
       0%, 100% { 
-        filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.4));
+        filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.5));
+        transform: scale(1);
       }
       50% { 
-        filter: drop-shadow(0 0 25px rgba(59, 130, 246, 0.7));
+        filter: drop-shadow(0 0 35px rgba(59, 130, 246, 0.8));
+        transform: scale(1.02);
       }
+    }
+    
+    @keyframes orbit {
+      0% { transform: rotate(0deg) translateX(65px) rotate(0deg); }
+      100% { transform: rotate(360deg) translateX(65px) rotate(-360deg); }
     }
     
     @keyframes borderGlow {
       0%, 100% { 
-        box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.05), 
-                    0 0 20px rgba(59, 130, 246, 0.1);
+        box-shadow: inset 0 0 30px rgba(59, 130, 246, 0.05), 
+                    0 0 30px rgba(59, 130, 246, 0.15),
+                    0 0 60px rgba(139, 92, 246, 0.1);
       }
       50% { 
-        box-shadow: inset 0 0 30px rgba(59, 130, 246, 0.1), 
-                    0 0 40px rgba(59, 130, 246, 0.2);
+        box-shadow: inset 0 0 40px rgba(59, 130, 246, 0.1), 
+                    0 0 50px rgba(59, 130, 246, 0.25),
+                    0 0 80px rgba(139, 92, 246, 0.15);
       }
     }
     
@@ -904,22 +1220,92 @@ stepperLabelComplete: {
     
     @keyframes shimmer {
       0% { transform: translateX(-100%); }
-      100% { transform: translateX(100%); }
+      100% { transform: translateX(200%); }
     }
     
     @keyframes radarPulse {
       0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.8; }
-      100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+      100% { transform: translate(-50%, -50%) scale(1.6); opacity: 0; }
     }
     
     @keyframes pulseDot {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.5; transform: scale(0.8); }
+      0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 8px #10b981; }
+      50% { opacity: 0.6; transform: scale(0.85); box-shadow: 0 0 15px #10b981; }
     }
     
     @keyframes slideProgress {
       0% { transform: translateX(-100%); }
       100% { transform: translateX(400%); }
+    }
+    
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    
+    @keyframes glowPulse {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+    
+    @keyframes achievementSlide {
+      0% { transform: translateX(100px); opacity: 0; }
+      10% { transform: translateX(0); opacity: 1; }
+      90% { transform: translateX(0); opacity: 1; }
+      100% { transform: translateX(100px); opacity: 0; }
+    }
+    
+    @keyframes comboScale {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+    
+    @keyframes flameDance {
+      0%, 100% { transform: rotate(-5deg) scale(1); }
+      25% { transform: rotate(5deg) scale(1.1); }
+      50% { transform: rotate(-3deg) scale(1); }
+      75% { transform: rotate(3deg) scale(1.05); }
+    }
+    
+    @keyframes particleFloat {
+      0%, 100% { 
+        transform: translateY(0) translateX(0) scale(1);
+        opacity: 0.6;
+      }
+      25% {
+        transform: translateY(-30px) translateX(15px) scale(0.8);
+        opacity: 0.8;
+      }
+      50% { 
+        transform: translateY(-60px) translateX(-10px) scale(1.1);
+        opacity: 0.4;
+      }
+      75% {
+        transform: translateY(-30px) translateX(-20px) scale(0.9);
+        opacity: 0.7;
+      }
+    }
+    
+    @keyframes xpShimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    
+    @keyframes rankPop {
+      0% { transform: scale(0) rotate(-180deg); }
+      50% { transform: scale(1.2) rotate(10deg); }
+      100% { transform: scale(1) rotate(0deg); }
+    }
+    
+    @keyframes buttonPulse {
+      0%, 100% { box-shadow: 0 8px 30px rgba(16, 185, 129, 0.4), 0 0 40px rgba(16, 185, 129, 0.1); }
+      50% { box-shadow: 0 8px 40px rgba(16, 185, 129, 0.6), 0 0 60px rgba(16, 185, 129, 0.2); }
+    }
+    
+    @keyframes stepPing {
+      0% { transform: scale(1); opacity: 1; }
+      75%, 100% { transform: scale(1.5); opacity: 0; }
     }
 
     /* FLOATING BACKGROUND SYMBOLS */
@@ -1025,20 +1411,50 @@ stepperLabelComplete: {
     .floating-symbol:nth-child(23) { animation: floatAround2 16s infinite; animation-delay: -3s; }
     .floating-symbol:nth-child(24) { animation: driftSlow 18s infinite; animation-delay: -7s; }
 
+    /* FLOATING PARTICLES */
+    .floating-particle {
+      animation: particleFloat 8s ease-in-out infinite;
+    }
+    
+    .floating-particle:nth-child(odd) {
+      animation-direction: reverse;
+    }
+    
+    /* UI ELEMENT ANIMATIONS */
+    .global-loading-spinner {
+      animation: globalLogoRotate 2s linear infinite;
+    }
+    
     .main-card {
-      animation: borderGlow 4s ease-in-out infinite;
+      animation: borderGlow 5s ease-in-out infinite;
     }
     
     .hexagon-badge {
       animation: hexPulse 3s ease-in-out infinite;
     }
     
+    .orbit-dot {
+      animation: orbit 10s linear infinite;
+    }
+    
+    .orbit-dot:nth-child(2) {
+      animation-delay: -3.33s;
+    }
+    
+    .orbit-dot:nth-child(3) {
+      animation-delay: -6.66s;
+    }
+    
     .scan-line {
-      animation: scanLine 3s ease-in-out infinite;
+      animation: scanLine 4s linear infinite;
     }
     
     .button-glow {
-      animation: shimmer 2s ease-in-out infinite;
+      animation: shimmer 2.5s ease-in-out infinite;
+    }
+    
+    .primary-nav-button {
+      animation: buttonPulse 2s ease-in-out infinite;
     }
     
     .radar-ring {
@@ -1051,63 +1467,141 @@ stepperLabelComplete: {
     }
     
     .pulse-dot {
-      animation: pulseDot 1s ease-in-out infinite;
+      animation: pulseDot 1.5s ease-in-out infinite;
     }
     
     .loading-progress-fill {
-      animation: slideProgress 1.5s ease-in-out infinite;
+      animation: slideProgress 1.5s ease-in-out infinite, xpShimmer 2s linear infinite;
     }
     
-    .loading-text {
-      animation: pulseDot 1.5s ease-in-out infinite;
+    .xp-shimmer {
+      animation: xpShimmer 2s linear infinite;
+      background-size: 200% 100%;
+    }
+    
+    .xp-fill {
+      animation: glowPulse 2s ease-in-out infinite;
+    }
+    
+    .achievement-toast {
+      animation: achievementSlide 3s ease-in-out forwards;
+    }
+    
+    .combo-counter {
+      animation: comboScale 0.5s ease-out;
+    }
+    
+    .flame-icon {
+      animation: flameDance 0.8s ease-in-out infinite;
+    }
+    
+    .experience-rank-badge {
+      animation: rankPop 0.5s ease-out;
+    }
+    
+    .step-active-ping {
+      animation: stepPing 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
     }
 
+    /* HOVER EFFECTS */
+    .pill-button {
+      position: relative;
+    }
+    
+    .pill-button::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 14px;
+      padding: 2px;
+      background: linear-gradient(135deg, transparent, transparent);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    
+    .pill-button:hover::before {
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      opacity: 1;
+    }
+    
     .pill-button:hover:not(.selected) {
-      background: rgba(255, 255, 255, 0.1) !important;
-      border-color: rgba(255, 255, 255, 0.25) !important;
+      background: rgba(255, 255, 255, 0.08) !important;
       color: #e2e8f0 !important;
-      transform: translateY(-2px) !important;
+      transform: translateY(-3px) scale(1.02) !important;
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3) !important;
     }
     
     .pill-button.selected:hover {
-      background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(139, 92, 246, 0.2)) !important;
-      transform: scale(1.05) translateY(-2px) !important;
+      transform: scale(1.08) translateY(-2px) !important;
+      box-shadow: 0 0 35px rgba(59, 130, 246, 0.4) !important;
+    }
+    
+    .pill-button:active {
+      transform: scale(0.98) !important;
     }
     
     .nav-button:hover:not(:disabled) {
-      transform: translateY(-2px) !important;
+      transform: translateY(-3px) scale(1.02) !important;
+    }
+    
+    .nav-button:active:not(:disabled) {
+      transform: translateY(0) scale(0.98) !important;
     }
     
     .primary-button:hover:not(:disabled) {
-      box-shadow: 0 8px 30px rgba(16, 185, 129, 0.4) !important;
+      box-shadow: 0 12px 40px rgba(16, 185, 129, 0.5), 0 0 60px rgba(16, 185, 129, 0.2) !important;
     }
     
     .secondary-button:hover:not(:disabled) {
       background: rgba(255, 255, 255, 0.1) !important;
-      border-color: rgba(255, 255, 255, 0.2) !important;
+      border-color: rgba(255, 255, 255, 0.25) !important;
       color: #e2e8f0 !important;
     }
     
     .back-button:hover {
       background: rgba(15, 17, 22, 1) !important;
-      border-color: rgba(59, 130, 246, 0.4) !important;
+      border-color: rgba(59, 130, 246, 0.5) !important;
       color: #e2e8f0 !important;
-      transform: translateY(-2px) !important;
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5) !important;
+      transform: translateY(-3px) !important;
+      box-shadow: 0 15px 50px rgba(0, 0, 0, 0.5), 0 0 30px rgba(59, 130, 246, 0.1) !important;
     }
     
     .experience-input:focus {
       border-color: #3b82f6 !important;
+      box-shadow: 0 4px 20px rgba(59, 130, 246, 0.2) !important;
     }
     
     .experience-button:hover {
-      background: rgba(59, 130, 246, 0.15) !important;
-      border-color: rgba(59, 130, 246, 0.4) !important;
+      background: rgba(59, 130, 246, 0.2) !important;
+      border-color: rgba(59, 130, 246, 0.5) !important;
       color: #3b82f6 !important;
+      transform: scale(1.1) !important;
+    }
+    
+    .experience-button:active {
+      transform: scale(0.95) !important;
     }
 
     .progress-step {
-      transition: all 0.3s ease;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .step-glow {
+      position: absolute;
+      inset: -4px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      opacity: 0;
+      z-index: -1;
+      filter: blur(8px);
+      transition: opacity 0.3s ease;
+    }
+    
+    .progress-step:hover .step-glow {
+      opacity: 0.5;
     }
   `;
 
@@ -1116,20 +1610,29 @@ stepperLabelComplete: {
       <div style={styles.pageContainer}>
         <style>{hoverStyles}</style>
         <div style={styles.gridOverlay} />
+        <FloatingParticles />
         <IsolatedAnimatedBackground />
         
         {/* Corner Accents */}
-        <svg style={{...styles.cornerAccent, top: 0, left: 0}} viewBox="0 0 100 100">
-          <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+        <svg style={{...styles.cornerAccent, top: 0, left: 0}} viewBox="0 0 120 120">
+          <path d="M0 50 L0 0 L50 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+          <path d="M0 30 L0 0 L30 0" fill="none" stroke="rgba(139, 92, 246, 0.3)" strokeWidth="1"/>
+          <circle cx="0" cy="0" r="4" fill="#3b82f6" opacity="0.8"/>
         </svg>
-        <svg style={{...styles.cornerAccent, top: 0, right: 0, transform: 'scaleX(-1)'}} viewBox="0 0 100 100">
-          <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+        <svg style={{...styles.cornerAccent, top: 0, right: 0, transform: 'scaleX(-1)'}} viewBox="0 0 120 120">
+          <path d="M0 50 L0 0 L50 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+          <path d="M0 30 L0 0 L30 0" fill="none" stroke="rgba(139, 92, 246, 0.3)" strokeWidth="1"/>
+          <circle cx="0" cy="0" r="4" fill="#3b82f6" opacity="0.8"/>
         </svg>
-        <svg style={{...styles.cornerAccent, bottom: 0, left: 0, transform: 'scaleY(-1)'}} viewBox="0 0 100 100">
-          <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+        <svg style={{...styles.cornerAccent, bottom: 0, left: 0, transform: 'scaleY(-1)'}} viewBox="0 0 120 120">
+          <path d="M0 50 L0 0 L50 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+          <path d="M0 30 L0 0 L30 0" fill="none" stroke="rgba(139, 92, 246, 0.3)" strokeWidth="1"/>
+          <circle cx="0" cy="0" r="4" fill="#3b82f6" opacity="0.8"/>
         </svg>
-        <svg style={{...styles.cornerAccent, bottom: 0, right: 0, transform: 'scale(-1)'}} viewBox="0 0 100 100">
-          <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+        <svg style={{...styles.cornerAccent, bottom: 0, right: 0, transform: 'scale(-1)'}} viewBox="0 0 120 120">
+          <path d="M0 50 L0 0 L50 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+          <path d="M0 30 L0 0 L30 0" fill="none" stroke="rgba(139, 92, 246, 0.3)" strokeWidth="1"/>
+          <circle cx="0" cy="0" r="4" fill="#3b82f6" opacity="0.8"/>
         </svg>
         
         <div style={styles.loadingContainer}>
@@ -1140,7 +1643,7 @@ stepperLabelComplete: {
               <div style={styles.radarRing} className="radar-ring" />
               <div style={styles.radarRing} className="radar-ring-delayed" />
               <div style={styles.radarCenter}>
-                <Sparkles size={24} color="#3b82f6" />
+                <Sparkles size={28} color="#3b82f6" />
               </div>
             </div>
             
@@ -1149,8 +1652,8 @@ stepperLabelComplete: {
               INITIALIZING
             </div>
             
-            <h2 style={styles.loadingTitle}>Preparing Onboarding</h2>
-            <p style={styles.loadingText}>Loading your personalized setup...</p>
+            <h2 style={styles.loadingTitle}>Preparing Your Journey</h2>
+            <p style={styles.loadingText}>Loading personalized onboarding...</p>
             
             <div style={styles.loadingProgress}>
               <div style={styles.loadingProgressFill} className="loading-progress-fill" />
@@ -1168,25 +1671,41 @@ stepperLabelComplete: {
       {/* Grid Overlay */}
       <div style={styles.gridOverlay} />
       
-      {/* Corner Accents */}
-      <svg style={{...styles.cornerAccent, top: 0, left: 0}} viewBox="0 0 100 100">
-        <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
-        <circle cx="0" cy="0" r="4" fill="#3b82f6" opacity="0.6"/>
+      {/* Floating Particles */}
+      <FloatingParticles />
+      
+      {/* Corner Accents - Enhanced */}
+      <svg style={{...styles.cornerAccent, top: 0, left: 0}} viewBox="0 0 120 120">
+        <path d="M0 50 L0 0 L50 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+        <path d="M0 30 L0 0 L30 0" fill="none" stroke="rgba(139, 92, 246, 0.3)" strokeWidth="1"/>
+        <circle cx="0" cy="0" r="5" fill="#3b82f6" opacity="0.8" className="pulse-dot"/>
       </svg>
-      <svg style={{...styles.cornerAccent, top: 0, right: 0, transform: 'scaleX(-1)'}} viewBox="0 0 100 100">
-        <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
-        <circle cx="0" cy="0" r="4" fill="#3b82f6" opacity="0.6"/>
+      <svg style={{...styles.cornerAccent, top: 0, right: 0, transform: 'scaleX(-1)'}} viewBox="0 0 120 120">
+        <path d="M0 50 L0 0 L50 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+        <path d="M0 30 L0 0 L30 0" fill="none" stroke="rgba(139, 92, 246, 0.3)" strokeWidth="1"/>
+        <circle cx="0" cy="0" r="5" fill="#8b5cf6" opacity="0.8"/>
       </svg>
-      <svg style={{...styles.cornerAccent, bottom: 0, left: 0, transform: 'scaleY(-1)'}} viewBox="0 0 100 100">
-        <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
-        <circle cx="0" cy="0" r="4" fill="#3b82f6" opacity="0.6"/>
+      <svg style={{...styles.cornerAccent, bottom: 0, left: 0, transform: 'scaleY(-1)'}} viewBox="0 0 120 120">
+        <path d="M0 50 L0 0 L50 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+        <path d="M0 30 L0 0 L30 0" fill="none" stroke="rgba(139, 92, 246, 0.3)" strokeWidth="1"/>
+        <circle cx="0" cy="0" r="5" fill="#10b981" opacity="0.8"/>
       </svg>
-      <svg style={{...styles.cornerAccent, bottom: 0, right: 0, transform: 'scale(-1)'}} viewBox="0 0 100 100">
-        <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
-        <circle cx="0" cy="0" r="4" fill="#3b82f6" opacity="0.6"/>
+      <svg style={{...styles.cornerAccent, bottom: 0, right: 0, transform: 'scale(-1)'}} viewBox="0 0 120 120">
+        <path d="M0 50 L0 0 L50 0" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2"/>
+        <path d="M0 30 L0 0 L30 0" fill="none" stroke="rgba(139, 92, 246, 0.3)" strokeWidth="1"/>
+        <circle cx="0" cy="0" r="5" fill="#f59e0b" opacity="0.8"/>
       </svg>
       
-      {/* Back to Login Button */}
+      {/* XP Bar */}
+      <XPBar currentStep={currentStep} totalSteps={4} />
+      
+      {/* Achievement Toast */}
+      <AchievementToast show={showAchievement} message={achievementMessage} icon={Trophy} />
+      
+      {/* Combo Counter */}
+      <ComboCounter count={selectionCombo} />
+      
+      {/* Back Button */}
       <button
         onClick={() => {
           if (window.confirm('Are you sure you want to go back to login?')) {
@@ -1199,93 +1718,155 @@ stepperLabelComplete: {
         className="back-button"
       >
         <ArrowLeft size={18} strokeWidth={2.5} />
-        Back to Login
+        Exit
       </button>
       
       <IsolatedAnimatedBackground />
 
       <div style={styles.container}>
         <div style={styles.mainCard} className="main-card">
+          <div style={styles.cardInnerGlow} />
           <div style={styles.cardGridOverlay} />
           <div style={styles.scanLine} className="scan-line" />
           
-          {/* Header - Show on Step 1 */}
+          {/* Glow Orbs */}
+          <div style={styles.glowOrbs}>
+            <div style={{
+              position: 'absolute',
+              width: '300px',
+              height: '300px',
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%)',
+              top: '-100px',
+              right: '-100px',
+              filter: 'blur(40px)'
+            }} className="float-orb" />
+            <div style={{
+              position: 'absolute',
+              width: '250px',
+              height: '250px',
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(139, 92, 246, 0.12) 0%, transparent 70%)',
+              bottom: '-80px',
+              left: '-80px',
+              filter: 'blur(40px)'
+            }} />
+          </div>
+          
+          {/* Header - Step 1 */}
           {currentStep === 1 && (
             <div style={styles.header}>
               <div style={styles.hexagonContainer}>
+                {/* Orbit Ring with Dots */}
+                <div style={styles.orbitRing}>
+                  <div style={styles.orbitDot} className="orbit-dot" />
+                  <div style={styles.orbitDot} className="orbit-dot" />
+                  <div style={styles.orbitDot} className="orbit-dot" />
+                </div>
+                
+                {/* Hexagon */}
                 <div style={styles.hexagonBadge} className="hexagon-badge">
-                  <svg style={styles.hexagonSvg} viewBox="0 0 70 80">
+                  <svg style={styles.hexagonSvg} viewBox="0 0 90 104">
                     <defs>
                       <linearGradient id="onboardHexGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.8"/>
-                        <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.8"/>
+                        <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.9"/>
+                        <stop offset="50%" stopColor="#8b5cf6" stopOpacity="0.8"/>
+                        <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.9"/>
                       </linearGradient>
+                      <filter id="hexGlow">
+                        <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                        <feMerge>
+                          <feMergeNode in="coloredBlur"/>
+                          <feMergeNode in="SourceGraphic"/>
+                        </feMerge>
+                      </filter>
                     </defs>
                     <polygon 
-                      points="35,2 67,20 67,60 35,78 3,60 3,20" 
-                      fill="rgba(15, 23, 42, 0.9)"
+                      points="45,2 87,25 87,79 45,102 3,79 3,25" 
+                      fill="rgba(15, 23, 42, 0.95)"
                       stroke="url(#onboardHexGrad)"
-                      strokeWidth="2"
+                      strokeWidth="2.5"
+                      filter="url(#hexGlow)"
                     />
                   </svg>
                   <div style={styles.hexagonContent}>
-                    <Sparkles size={28} color="#3b82f6" />
+                    <Rocket size={36} color="#3b82f6" />
                   </div>
                 </div>
               </div>
+              
               <div style={styles.statusBadge}>
-                <Radio size={12} />
-                SYSTEM READY
+                <div style={styles.pulseDot} className="pulse-dot" />
+                MISSION START
               </div>
-              <h1 style={styles.title}>Welcome, {user?.full_name}!</h1>
+              <h1 style={{...styles.title, ...styles.titleGradient}}>Welcome, {user?.full_name}!</h1>
               <p style={styles.subtitle}>Let's personalize your TechSync experience</p>
             </div>
           )}
 
-          {/* Progress Indicator */}
+          {/* Progress Stepper */}
           <div style={styles.progressContainer}>
-  <div style={styles.stepperContainer}>
-    {[1, 2, 3, 4].map((step, index) => {
-      const StepIcon = stepIcons[step];
-      const isActive = step === currentStep;
-      const isComplete = step < currentStep;
-      
-      return (
-        <React.Fragment key={step}>
-          {/* Step Node */}
-          <div style={styles.stepperNode}>
-            <div
-              style={{
-                ...styles.stepperCircle,
-                ...(isActive ? styles.stepperCircleActive : {}),
-                ...(isComplete ? styles.stepperCircleComplete : {})
-              }}
-            >
-              {isComplete ? <CheckCircle size={20} /> : <StepIcon size={20} />}
+            <div style={styles.stepperContainer}>
+              {[1, 2, 3, 4].map((step, index) => {
+                const StepIcon = stepIcons[step];
+                const isActive = step === currentStep;
+                const isComplete = step < currentStep;
+                
+                return (
+                  <React.Fragment key={step}>
+                    {/* Step Node */}
+                    <div style={styles.stepperNode}>
+                      <div
+                        className="progress-step"
+                        style={{
+                          ...styles.stepperCircle,
+                          ...(isActive ? styles.stepperCircleActive : {}),
+                          ...(isComplete ? styles.stepperCircleComplete : {})
+                        }}
+                      >
+                        {/* Active ping effect */}
+                        {isActive && (
+                          <div className="step-active-ping" style={{
+                            position: 'absolute',
+                            inset: 0,
+                            borderRadius: '16px',
+                            border: '2px solid #3b82f6',
+                            opacity: 0
+                          }} />
+                        )}
+                        
+                        {isComplete ? (
+                          <CheckCircle size={22} />
+                        ) : (
+                          <>
+                            <StepIcon size={20} />
+                            <span style={styles.stepEmoji}>{stepEmojis[step]}</span>
+                          </>
+                        )}
+                      </div>
+                      <span style={{
+                        ...styles.stepperLabel,
+                        ...(isActive ? styles.stepperLabelActive : {}),
+                        ...(isComplete ? styles.stepperLabelComplete : {})
+                      }}>
+                        {stepLabels[step]}
+                      </span>
+                    </div>
+                    
+                    {/* Connector Line */}
+                    {index < 3 && (
+                      <div style={{
+                        ...styles.stepperLine,
+                        ...(step < currentStep ? styles.stepperLineFilled : {})
+                      }} />
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </div>
-            <span style={{
-              ...styles.stepperLabel,
-              ...(isActive ? styles.stepperLabelActive : {}),
-              ...(isComplete ? styles.stepperLabelComplete : {})
-            }}>
-              {stepLabels[step]}
-            </span>
           </div>
-          
-          {/* Connector Line (not after last step) */}
-          {index < 3 && (
-            <div style={{
-              ...styles.stepperLine,
-              ...(step < currentStep ? styles.stepperLineFilled : {})
-            }} />
-          )}
-        </React.Fragment>
-      );
-    })}
-  </div>
-</div>
 
-          {/* Error/Success messages */}
+          {/* Error/Success */}
           {error && (
             <div style={styles.error}>
               <Shield size={18} />
@@ -1299,16 +1880,18 @@ stepperLabelComplete: {
             </div>
           )}
 
-          {/* Step 1: Select Programming Languages */}
+          {/* Step 1: Languages */}
           {currentStep === 1 && (
             <div style={styles.stepContainer}>
               <div style={styles.stepHeader}>
                 <div style={styles.stepBadge}>
-                  <Code2 size={16} color="#3b82f6" />
-                  <span style={styles.stepBadgeText}>Step 1 of 4</span>
+                  <div style={styles.stepBadgeIcon}>
+                    <Code2 size={16} color="#3b82f6" />
+                  </div>
+                  <span style={styles.stepBadgeText}>Mission 1 of 4</span>
                 </div>
-                <h2 style={styles.stepTitle}>What Programming Languages are you skilled at?</h2>
-                <p style={styles.stepSubtitle}>Select your primary languages. We recommend choosing 3 for better recommendations.</p>
+                <h2 style={styles.stepTitle}>Select Your Programming Languages</h2>
+                <p style={styles.stepSubtitle}>Choose the languages you're skilled at. Select 3+ for better matches!</p>
               </div>
               
               <div style={styles.buttonGrid}>
@@ -1324,6 +1907,7 @@ stepperLabelComplete: {
                         ...(isSelected ? styles.selectedPillButton : {})
                       }}
                     >
+                      {isSelected && <CheckCircle size={14} style={{ marginRight: '6px' }} />}
                       {language.name}
                     </button>
                   );
@@ -1332,23 +1916,26 @@ stepperLabelComplete: {
 
               {selectedLanguages.length > 0 && (
                 <div style={styles.selectionCount}>
-                  <CheckCircle size={16} />
+                  <Star size={16} color="#fbbf24" fill="#fbbf24" />
                   {selectedLanguages.length} language{selectedLanguages.length !== 1 ? 's' : ''} selected
+                  {selectedLanguages.length >= 3 && <span style={{ marginLeft: '8px' }}>🎯 Great choices!</span>}
                 </div>
               )}
             </div>
           )}
 
-          {/* Step 2: Select Topics */}
+          {/* Step 2: Topics */}
           {currentStep === 2 && (
             <div style={styles.stepContainer}>
               <div style={styles.stepHeader}>
                 <div style={styles.stepBadge}>
-                  <BookOpen size={16} color="#3b82f6" />
-                  <span style={styles.stepBadgeText}>Step 2 of 4</span>
+                  <div style={styles.stepBadgeIcon}>
+                    <BookOpen size={16} color="#3b82f6" />
+                  </div>
+                  <span style={styles.stepBadgeText}>Mission 2 of 4</span>
                 </div>
-                <h2 style={styles.stepTitle}>What topics interest you most?</h2>
-                <p style={styles.stepSubtitle}>Choose areas you'd like to learn or work with.</p>
+                <h2 style={styles.stepTitle}>What Topics Interest You?</h2>
+                <p style={styles.stepSubtitle}>Select areas you'd like to explore and work on.</p>
               </div>
               
               <div style={styles.buttonGrid}>
@@ -1364,6 +1951,7 @@ stepperLabelComplete: {
                         ...(isSelected ? styles.selectedPillButton : {})
                       }}
                     >
+                      {isSelected && <CheckCircle size={14} style={{ marginRight: '6px' }} />}
                       {topic.name}
                     </button>
                   );
@@ -1372,26 +1960,30 @@ stepperLabelComplete: {
 
               {selectedTopics.length > 0 && (
                 <div style={styles.selectionCount}>
-                  <CheckCircle size={16} />
+                  <Target size={16} color="#10b981" />
                   {selectedTopics.length} topic{selectedTopics.length !== 1 ? 's' : ''} selected
+                  {selectedTopics.length >= 3 && <span style={{ marginLeft: '8px' }}>🚀 Explorer!</span>}
                 </div>
               )}
             </div>
           )}
 
-          {/* Step 3: Years of Experience */}
+          {/* Step 3: Experience */}
           {currentStep === 3 && (
             <div style={styles.stepContainer}>
               <div style={styles.stepHeader}>
                 <div style={styles.stepBadge}>
-                  <Clock size={16} color="#3b82f6" />
-                  <span style={styles.stepBadgeText}>Step 3 of 4</span>
+                  <div style={styles.stepBadgeIcon}>
+                    <Clock size={16} color="#3b82f6" />
+                  </div>
+                  <span style={styles.stepBadgeText}>Mission 3 of 4</span>
                 </div>
-                <h2 style={styles.stepTitle}>How many years of programming experience?</h2>
-                <p style={styles.stepSubtitle}>This helps us find projects suited to your level.</p>
+                <h2 style={styles.stepTitle}>Your Experience Level</h2>
+                <p style={styles.stepSubtitle}>How many years have you been coding?</p>
               </div>
               
               <div style={styles.experienceContainer}>
+                <div style={styles.experienceInnerGlow} />
                 <div style={styles.experienceInputContainer}>
                   <div style={styles.experienceInputWrapper}>
                     <button
@@ -1421,30 +2013,45 @@ stepperLabelComplete: {
                   
                   {(() => {
                     const level = getExperienceLevel(yearsExperience);
+                    const LevelIcon = level.icon;
                     return (
-                      <div style={{
-                        ...styles.experienceLevelBadge,
-                        backgroundColor: `${level.color}15`,
-                        borderColor: `${level.color}40`,
-                        color: level.color
-                      }}>
-                        <span>{level.icon}</span>
-                        <span>{level.label}</span>
+                      <div style={styles.experienceRankContainer}>
+                        <div 
+                          className="experience-rank-badge"
+                          style={{
+                            ...styles.experienceRankBadge,
+                            backgroundColor: `${level.color}20`,
+                            borderColor: level.color,
+                            color: level.color,
+                            boxShadow: `0 0 30px ${level.color}40`
+                          }}
+                        >
+                          {level.rank}
+                        </div>
+                        <div style={{
+                          ...styles.experienceLevelBadge,
+                          backgroundColor: `${level.color}15`,
+                          borderColor: `${level.color}40`,
+                          color: level.color
+                        }}>
+                          <LevelIcon size={18} />
+                          <span>{level.emoji} {level.label}</span>
+                        </div>
                       </div>
                     );
                   })()}
                   
                   <p style={styles.experienceText}>
-                    {yearsExperience === 0 ? 'Just getting started - no worries!' : 
-                     yearsExperience === 1 ? '1 year of coding experience' : 
-                     `${yearsExperience} years of coding experience`}
+                    {yearsExperience === 0 ? "Everyone starts somewhere! Let's go!" : 
+                     yearsExperience === 1 ? '1 year of coding adventures' : 
+                     `${yearsExperience} years of coding mastery`}
                   </p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Step 4: Pre-Assessment Challenges */}
+          {/* Step 4: Challenge */}
           {currentStep === 4 && !allChallengesComplete && (
             <div style={styles.challengeContainer}>
               <PreAssessmentModal
@@ -1455,7 +2062,7 @@ stepperLabelComplete: {
             </div>
           )}
 
-          {/* Navigation Buttons - Hide on Step 4 */}
+          {/* Navigation */}
           {currentStep !== 4 && (
             <div style={styles.navigationButtons}>
               {currentStep > 1 && (
@@ -1468,20 +2075,20 @@ stepperLabelComplete: {
                   }}
                 >
                   <ArrowLeft size={18} />
-                  Previous
+                  Back
                 </button>
               )}
 
               <button
                 onClick={handleNextStep}
-                className="nav-button primary-button"
+                className="nav-button primary-button primary-nav-button"
                 style={{
                   ...styles.navButton,
                   ...styles.primaryButton
                 }}
               >
                 <span style={styles.buttonGlow} className="button-glow" />
-                Continue
+                {currentStep === 3 ? 'Start Challenge' : 'Continue'}
                 <ChevronRight size={18} />
               </button>
             </div>
