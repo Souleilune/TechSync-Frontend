@@ -255,7 +255,7 @@ const AssessmentResultModal = ({
         {/* Continue Button */}
         {animationPhase === 'complete' && (
           <button
-            onClick={onContinue}
+            onClick={onComplete}
             disabled={loading}
             style={{
               ...styles.continueButton,
