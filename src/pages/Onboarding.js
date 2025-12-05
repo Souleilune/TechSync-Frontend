@@ -296,6 +296,8 @@ function Onboarding() {
   const [showCourseRecommendations, setShowCourseRecommendations] = useState(false);
   const [currentRecommendationLanguage, setCurrentRecommendationLanguage] = useState(null);
   const [enrolledCourses, setEnrolledCourses] = useState([]);
+  const [beginnerLanguages, setBeginnerLanguages] = useState([]);
+
 
   
   // Load initial data
@@ -357,11 +359,10 @@ function Onboarding() {
   useEffect(() => {
   console.log('🔄 Modal state changed:', {
     showCourseRecommendations,
-    showResultModal,
     currentStep,
     allChallengesComplete
   });
-}, [showCourseRecommendations, showResultModal, currentStep, allChallengesComplete]);
+}, [showCourseRecommendations, currentStep, allChallengesComplete]);
 
   // Show achievement
   const triggerAchievement = (message) => {
@@ -519,6 +520,37 @@ const handleCourseRecommendationComplete = async (enrolledCourses) => {
     
     // Complete onboarding immediately
     await handleCompleteOnboarding();
+  }
+};
+
+const handleSkipCourseRecommendations = () => {
+  console.log('⏭️ Skipped course recommendations');
+  setShowCourseRecommendations(false);
+  setCurrentRecommendationLanguage(null);
+  
+  // Move to next beginner language or complete onboarding
+  const beginnerResults = challengeResults.filter(r => 
+    determineProficiencyLevel(r.score) === 'beginner'
+  );
+  
+  const currentIndex = beginnerResults.findIndex(
+    r => r.languageId === currentRecommendationLanguage?.language_id
+  );
+
+  if (currentIndex >= 0 && currentIndex < beginnerResults.length - 1) {
+    // More beginner languages - show next one
+    const nextBeginnerResult = beginnerResults[currentIndex + 1];
+    console.log('➡️ Moving to next beginner language:', nextBeginnerResult.languageName);
+    
+    setCurrentRecommendationLanguage({
+      language_id: nextBeginnerResult.languageId,
+      name: nextBeginnerResult.languageName,
+      result: nextBeginnerResult
+    });
+    setShowCourseRecommendations(true);
+  } else {
+    // All done - complete onboarding
+    handleCompleteOnboarding();
   }
 };
 
@@ -2187,17 +2219,19 @@ const handleCourseRecommendationComplete = async (enrolledCourses) => {
           )}
 
           {showCourseRecommendations && currentRecommendationLanguage && (
-          <CourseRecommendationModal
-            language={{
-              language_id: currentRecommendationLanguage.language_id,
-              name: currentRecommendationLanguage.name
-            }}
-            proficiencyLevel={currentRecommendationLanguage.result?.proficiencyLevel}
-            score={currentRecommendationLanguage.result?.score}
-            onContinue={handleCourseRecommendationComplete}
-            onSkip={handleSkipCourseRecommendations}
-          />
-        )}
+            <CourseRecommendationModal
+              language={{
+                language_id: currentRecommendationLanguage.language_id,
+                name: currentRecommendationLanguage.name
+              }}
+              proficiencyLevel={currentRecommendationLanguage.result?.proficiencyLevel}
+              score={currentRecommendationLanguage.result?.score}
+              challengesPassed={challengeResults.filter(r => r.passed).length} // ✅ NEW
+              totalChallenges={selectedLanguages.length}                       // ✅ NEW
+              onContinue={handleCourseRecommendationComplete}
+              onSkip={handleSkipCourseRecommendations}
+            />
+          )}
 
         
       </div>
