@@ -406,6 +406,13 @@ function Onboarding() {
     }
   };
 
+  const determineProficiencyLevel = (score) => {
+  if (score >= 90) return 'expert';
+  if (score >= 75) return 'advanced';
+  if (score >= 60) return 'intermediate';
+  return 'beginner';
+};
+
   // Handle challenge completion
   const handleChallengeComplete = (result) => {
   console.log('📝 Challenge result:', result);
