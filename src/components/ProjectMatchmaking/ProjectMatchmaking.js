@@ -4,8 +4,6 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import SkillMatchingAPI from '../../services/skillMatchingAPI';
 import MatchmakingModal from './MatchmakingModal';
-import { useNavigate } from 'react-router-dom'; // Add this
-import { projectService } from '../../services/projectService'; // Add this
 import { 
   Search, 
   Target, 
@@ -31,10 +29,6 @@ const ProjectMatchmaking = ({ onProjectSelect }) => {
   const [searchProgress, setSearchProgress] = useState(0);
   const [cooldownTime, setCooldownTime] = useState(0);
   const [showMatchModal, setShowMatchModal] = useState(false);
-  const [joining, setJoining] = useState(false);
-  const navigate = useNavigate();
-  
-
 
   // Cooldown timer
   useEffect(() => {
@@ -510,12 +504,9 @@ const ProjectMatchmaking = ({ onProjectSelect }) => {
             )}
 
             {/* Join Button */}
-            <button 
-              onClick={() => handleJoinProject(project.id, project.title)}
-              disabled={joining}
-              style={styles.joinButton}
-            >
-              {joining ? 'Joining...' : 'Join Project'}
+            <button style={styles.joinButton}>
+              <Code size={16} />
+              View Project
             </button>
           </div>
         ))}
