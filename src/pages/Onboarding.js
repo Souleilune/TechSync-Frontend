@@ -1064,17 +1064,6 @@ function Onboarding() {
       zIndex: 3,
       boxShadow: '0 4px 20px rgba(34, 197, 94, 0.15)'
     },
-    challengeContainer: {
-      position: 'fixed',  // Changed from 'relative'
-      top: 0,             // Added
-      left: 0,            // Added
-      right: 0,           // Added
-      bottom: 0,          // Added
-      zIndex: 1000,       // Changed from 20 to match PreAssessmentModal overlay z-index
-      display: 'flex',    // Added
-      alignItems: 'center', // Added
-      justifyContent: 'center' // Added
-    },
     backButton: {
       position: 'fixed',
       top: '100px',
