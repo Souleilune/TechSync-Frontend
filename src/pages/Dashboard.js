@@ -10,7 +10,7 @@ import NotificationDropdown from '../components/Notifications/NotificationDropdo
 import AIChatInterface from '../components/AIChat/AIChatInterface';
 import ProjectChallengeInterface from '../components/ProjectChallengeInterface'; // ADD THIS IMPORT
 import ProjectDetailModal from '../components/ProjectDetailModal';
-import { projectService } from '../../services/projectService'; // Add this
+import { projectService } from '../services/projectService'; // Add this
 import TimelineFeed from '../components/TimelineFeed';
 import { Plus, Bell, Rocket, Code, Users, BookOpen, HelpCircle, LockKeyhole, PanelLeft, Sparkles } from 'lucide-react';
 import ProjectMatchmaking from '../components/ProjectMatchmaking/ProjectMatchmaking';
