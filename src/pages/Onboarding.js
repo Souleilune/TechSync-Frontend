@@ -2060,13 +2060,11 @@ function Onboarding() {
 
           {/* Step 4: Challenge */}
           {currentStep === 4 && !allChallengesComplete && (
-            <div style={styles.challengeContainer}>
               <PreAssessmentModal
                 language={selectedLanguages[currentChallengeIndex]}
                 onComplete={handleChallengeComplete}
                 onClose={() => setCurrentStep(3)}
               />
-            </div>
           )}
 
           {/* Navigation */}
