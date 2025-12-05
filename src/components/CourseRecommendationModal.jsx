@@ -1,29 +1,28 @@
 // frontend/src/components/CourseRecommendationModal.jsx
+// UPDATED - Combined view for all beginner languages
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Clock, Award, ChevronRight, Sparkles, CheckCircle, Trophy } from 'lucide-react';
+import { BookOpen, Clock, Award, ChevronRight, Sparkles, CheckCircle, Trophy, Code2 } from 'lucide-react';
 
 const CourseRecommendationModal = ({ 
-  language, 
-  proficiencyLevel, 
-  score,
+  languages, // ✅ NOW ACCEPTS ARRAY OF ALL BEGINNER LANGUAGES
   challengesPassed = 0,
   totalChallenges = 1,
   onContinue, 
   onSkip 
 }) => {
-  const [courses, setCourses] = useState([]);
+  const [coursesByLanguage, setCoursesByLanguage] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [savedCourses, setSavedCourses] = useState(new Set());
   const [enrolling, setEnrolling] = useState(new Set());
 
   useEffect(() => {
-    if (proficiencyLevel === 'beginner') {
-      loadCourseRecommendations();
+    if (languages && languages.length > 0) {
+      loadAllCourseRecommendations();
     }
-  }, [language, proficiencyLevel]);
+  }, [languages]);
 
-  const loadCourseRecommendations = async () => {
+  const loadAllCourseRecommendations = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -41,40 +40,66 @@ const CourseRecommendationModal = ({
       }
 
       const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-      const response = await fetch(`${API_URL}/recommendations/challenge-failure`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          challengeId: 'onboarding-assessment',
-          attemptCount: 15,
-          programmingLanguageId: language.language_id,
-          difficultyLevel: 'beginner'
-        })
+      
+      // ✅ Load courses for ALL beginner languages in parallel
+      const coursesPromises = languages.map(async (lang) => {
+        try {
+          const response = await fetch(`${API_URL}/recommendations/challenge-failure`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              challengeId: 'onboarding-assessment',
+              attemptCount: 15,
+              programmingLanguageId: lang.language_id,
+              difficultyLevel: 'beginner'
+            })
+          });
+
+          if (response.status === 401) {
+            throw new Error('Session expired');
+          }
+
+          const data = await response.json();
+          
+          if (data.success && data.resources) {
+            const internalCourses = data.resources.filter(
+              resource => resource.provider?.toLowerCase() === 'internal_course'
+            );
+            return {
+              language: lang,
+              courses: internalCourses
+            };
+          }
+          
+          return {
+            language: lang,
+            courses: []
+          };
+        } catch (err) {
+          console.error(`Error loading courses for ${lang.name}:`, err);
+          return {
+            language: lang,
+            courses: []
+          };
+        }
       });
 
-      if (response.status === 401) {
-        console.error('❌ Token expired or invalid');
-        setError('Session expired');
-        setLoading(false);
-        setTimeout(() => {
-          onContinue([]);
-        }, 1000);
-        return;
-      }
-
-      const data = await response.json();
+      const results = await Promise.all(coursesPromises);
       
-      if (data.success && data.resources) {
-        const internalCourses = data.resources.filter(
-          resource => resource.provider?.toLowerCase() === 'internal_course'
-        );
-        setCourses(internalCourses);
-      } else {
-        throw new Error('Failed to load course recommendations');
-      }
+      // Convert array to object keyed by language_id
+      const coursesMap = {};
+      results.forEach(({ language, courses }) => {
+        coursesMap[language.language_id] = {
+          language,
+          courses
+        };
+      });
+
+      setCoursesByLanguage(coursesMap);
+      
     } catch (err) {
       console.error('Error loading courses:', err);
       setError('Unable to load courses');
@@ -145,131 +170,65 @@ const CourseRecommendationModal = ({
     onSkip();
   };
 
-  const getProficiencyBadge = (level) => {
-    const badges = {
-      beginner: { 
-        icon: '🌱', 
-        color: '#f59e0b', 
-        title: 'Beginner Developer',
-        message: 'Everyone starts somewhere! Let\'s build your foundation together.'
-      },
-      intermediate: { 
-        icon: '⭐', 
-        color: '#10b981', 
-        title: 'Intermediate Developer',
-        message: 'You\'re making great progress! Keep building on your skills.'
-      },
-      advanced: { 
-        icon: '🚀', 
-        color: '#3b82f6', 
-        title: 'Advanced Developer',
-        message: 'Strong skills! Time to master advanced concepts and patterns.'
-      },
-      expert: { 
-        icon: '👑', 
-        color: '#8b5cf6', 
-        title: 'Expert Developer',
-        message: 'Exceptional! You\'re ready for complex challenges and leadership.'
-      }
+  const getProficiencyBadge = (score) => {
+    if (score >= 90) return { icon: '👑', color: '#8b5cf6', title: 'Expert Developer' };
+    if (score >= 75) return { icon: '🚀', color: '#3b82f6', title: 'Advanced Developer' };
+    if (score >= 60) return { icon: '⭐', color: '#10b981', title: 'Intermediate Developer' };
+    return { 
+      icon: '🌱', 
+      color: '#f59e0b', 
+      title: 'Beginner Developer',
+      message: 'Everyone starts somewhere! Let\'s build your foundation together.'
     };
-    return badges[level] || badges.beginner;
   };
 
-  const badge = getProficiencyBadge(proficiencyLevel);
-
-  if (proficiencyLevel !== 'beginner') {
-    console.log('⏭️ Not a beginner, skipping course recommendations');
-    onContinue([]);
-    return null;
-  }
+  // Calculate total courses across all languages
+  const totalCoursesAvailable = Object.values(coursesByLanguage).reduce(
+    (sum, { courses }) => sum + courses.length, 
+    0
+  );
 
   return (
     <>
       <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes hexPulse {
-          0%, 100% { 
-            transform: scale(1); 
-            opacity: 1; 
-          }
-          50% { 
-            transform: scale(1.05); 
-            opacity: 0.85; 
-          }
-        }
-        @keyframes shimmer {
-          0% { background-position: -1000px 0; }
-          100% { background-position: 1000px 0; }
-        }
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
         @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
 
       <div style={styles.overlay}>
         <div style={styles.modal}>
-          
-          {/* 🎉 CELEBRATION HEADER */}
-          <div style={styles.celebrationHeader}>
-            {/* Hexagon Badge */}
-            <div style={styles.badgeContainer}>
-              <svg style={styles.hexagonSvg} viewBox="0 0 100 115">
-                <defs>
-                  <linearGradient id="hexGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" style={{ stopColor: badge.color, stopOpacity: 0.6 }} />
-                    <stop offset="100%" style={{ stopColor: badge.color, stopOpacity: 0.2 }} />
-                  </linearGradient>
-                  <filter id="glow">
-                    <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-                    <feMerge>
-                      <feMergeNode in="coloredBlur"/>
-                      <feMergeNode in="SourceGraphic"/>
-                    </feMerge>
-                  </filter>
-                </defs>
-                <polygon
-                  points="50,5 95,30 95,75 50,100 5,75 5,30"
-                  fill="url(#hexGradient)"
-                  stroke={badge.color}
-                  strokeWidth="2"
-                  filter="url(#glow)"
-                  style={{ animation: 'hexPulse 2s ease-in-out infinite' }}
-                />
-              </svg>
-              <div style={styles.hexagonContent}>
-                <div style={{ fontSize: '48px' }}>{badge.icon}</div>
-              </div>
+          {/* 🎯 HEADER SECTION */}
+          <div style={styles.header}>
+            <div style={styles.headerBadge}>
+              <Trophy size={32} color="#f59e0b" />
             </div>
-
-            {/* Achievement Text */}
-            <div style={styles.achievementText}>
-              <div style={styles.completeText}>
-                <Trophy size={14} style={{ display: 'inline-block', marginRight: '6px' }} />
-                Assessment Complete
-              </div>
-              <h2 style={styles.achievementTitle}>{badge.title}</h2>
-              <p style={styles.languageText}>in {language.name}</p>
+            <div style={styles.headerContent}>
+              <p style={styles.headerLabel}>🏆 ASSESSMENT COMPLETE</p>
+              <h2 style={styles.headerTitle}>
+                {languages.length === 1 
+                  ? 'BEGINNER DEVELOPER' 
+                  : `${languages.length} LANGUAGES - BEGINNER LEVEL`}
+              </h2>
+              
+              {/* Show all languages */}
+              <p style={styles.languageText}>
+                {languages.map(l => l.name).join(', ')}
+              </p>
               
               {/* Stats Row */}
               <div style={styles.statsRow}>
                 <div style={styles.statBadge}>
-                  <span style={{ ...styles.statValue, color: badge.color }}>
-                    {score}%
+                  <span style={{ ...styles.statValue, color: '#f59e0b' }}>
+                    {languages.length}
                   </span>
-                  <span style={styles.statLabel}>Score</span>
+                  <span style={styles.statLabel}>
+                    {languages.length === 1 ? 'Language' : 'Languages'}
+                  </span>
                 </div>
                 <div style={styles.statDivider} />
                 <div style={styles.statBadge}>
@@ -278,11 +237,18 @@ const CourseRecommendationModal = ({
                   </span>
                   <span style={styles.statLabel}>Passed</span>
                 </div>
+                <div style={styles.statDivider} />
+                <div style={styles.statBadge}>
+                  <span style={{ ...styles.statValue, color: '#3b82f6' }}>
+                    {totalCoursesAvailable}
+                  </span>
+                  <span style={styles.statLabel}>Courses</span>
+                </div>
               </div>
 
               {/* Motivational Message */}
               <p style={styles.motivationalText}>
-                {badge.message}
+                Everyone starts somewhere! Let's build your foundation together.
               </p>
             </div>
           </div>
@@ -290,16 +256,16 @@ const CourseRecommendationModal = ({
           {/* Divider */}
           <div style={styles.sectionDivider} />
 
-          {/* 📚 COURSE SECTION */}
+          {/* 📚 COURSES SECTION */}
           <div style={styles.content}>
             <div style={styles.courseHeaderSection}>
               <div style={styles.courseHeaderIcon}>
                 <Sparkles size={24} color="#3b82f6" />
               </div>
               <div>
-                <h3 style={styles.sectionTitle}>Recommended Learning Path</h3>
+                <h3 style={styles.sectionTitle}>Your Personalized Learning Path</h3>
                 <p style={styles.sectionSubtitle}>
-                  Based on your performance, we've curated these courses to help you level up!
+                  Based on your assessment results, we've curated courses for each language to help you level up!
                 </p>
               </div>
             </div>
@@ -309,7 +275,7 @@ const CourseRecommendationModal = ({
                 <div style={styles.spinner} />
                 <p style={styles.loadingText}>Finding the perfect courses for you...</p>
               </div>
-            ) : error || courses.length === 0 ? (
+            ) : error || totalCoursesAvailable === 0 ? (
               <div style={styles.emptyContainer}>
                 <div style={styles.emptyIcon}>📚</div>
                 <h3 style={styles.emptyTitle}>
@@ -338,72 +304,92 @@ const CourseRecommendationModal = ({
               </div>
             ) : (
               <>
-                <div style={styles.coursesGrid}>
-                  {courses.map((course, index) => (
-                    <div 
-                      key={index} 
-                      style={{
-                        ...styles.courseCard,
-                        animation: `slideUp 0.5s ease-out ${index * 0.1}s both`
-                      }}
-                    >
-                      <div style={styles.courseCardHeader}>
-                        <div style={styles.courseIcon}>
-                          {course.icon || '📚'}
-                        </div>
-                        <div style={styles.courseInfo}>
-                          <h3 style={styles.courseTitle}>{course.title}</h3>
-                          <p style={styles.courseDescription}>{course.description}</p>
-                        </div>
+                {/* ✅ RENDER COURSES GROUPED BY LANGUAGE */}
+                {Object.entries(coursesByLanguage).map(([langId, { language, courses }]) => (
+                  courses.length > 0 && (
+                    <div key={langId} style={styles.languageSection}>
+                      {/* Language Header */}
+                      <div style={styles.languageHeader}>
+                        <Code2 size={20} color="#3b82f6" />
+                        <h4 style={styles.languageSectionTitle}>
+                          {language.name} Courses
+                        </h4>
+                        <span style={styles.languageCourseCount}>
+                          {courses.length} {courses.length === 1 ? 'course' : 'courses'}
+                        </span>
                       </div>
 
-                      <div style={styles.courseMeta}>
-                        <div style={styles.metaItem}>
-                          <Clock size={14} />
-                          <span>{course.duration || 'Self-paced'}</span>
-                        </div>
-                        {course.lessonCount && (
-                          <div style={styles.metaItem}>
-                            <BookOpen size={14} />
-                            <span>{course.lessonCount} lessons</span>
+                      {/* Courses Grid for this Language */}
+                      <div style={styles.coursesGrid}>
+                        {courses.map((course, index) => (
+                          <div 
+                            key={index} 
+                            style={{
+                              ...styles.courseCard,
+                              animation: `slideUp 0.5s ease-out ${index * 0.1}s both`
+                            }}
+                          >
+                            <div style={styles.courseCardHeader}>
+                              <div style={styles.courseIcon}>
+                                {course.icon || '📚'}
+                              </div>
+                              <div style={styles.courseInfo}>
+                                <h3 style={styles.courseTitle}>{course.title}</h3>
+                                <p style={styles.courseDescription}>{course.description}</p>
+                              </div>
+                            </div>
+
+                            <div style={styles.courseMeta}>
+                              <div style={styles.metaItem}>
+                                <Clock size={14} />
+                                <span>{course.duration || 'Self-paced'}</span>
+                              </div>
+                              {course.lessonCount && (
+                                <div style={styles.metaItem}>
+                                  <BookOpen size={14} />
+                                  <span>{course.lessonCount} lessons</span>
+                                </div>
+                              )}
+                              <div style={styles.metaItem}>
+                                <Award size={14} />
+                                <span>{course.difficulty || 'Beginner'}</span>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => handleEnrollCourse(course)}
+                              disabled={isEnrolled(course) || isEnrolling(course)}
+                              style={{
+                                ...styles.enrollButton,
+                                ...(isEnrolled(course) ? styles.enrolledButton : {}),
+                                ...(isEnrolling(course) ? styles.enrollingButton : {})
+                              }}
+                            >
+                              {isEnrolling(course) ? (
+                                <>
+                                  <div style={styles.smallSpinner} />
+                                  Enrolling...
+                                </>
+                              ) : isEnrolled(course) ? (
+                                <>
+                                  <CheckCircle size={16} />
+                                  Enrolled
+                                </>
+                              ) : (
+                                <>
+                                  <BookOpen size={16} />
+                                  Enroll Now
+                                </>
+                              )}
+                            </button>
                           </div>
-                        )}
-                        <div style={styles.metaItem}>
-                          <Award size={14} />
-                          <span>{course.difficulty || 'Beginner'}</span>
-                        </div>
+                        ))}
                       </div>
-
-                      <button
-                        onClick={() => handleEnrollCourse(course)}
-                        disabled={isEnrolled(course) || isEnrolling(course)}
-                        style={{
-                          ...styles.enrollButton,
-                          ...(isEnrolled(course) ? styles.enrolledButton : {}),
-                          ...(isEnrolling(course) ? styles.enrollingButton : {})
-                        }}
-                      >
-                        {isEnrolling(course) ? (
-                          <>
-                            <div style={styles.smallSpinner} />
-                            Enrolling...
-                          </>
-                        ) : isEnrolled(course) ? (
-                          <>
-                            <CheckCircle size={16} />
-                            Enrolled
-                          </>
-                        ) : (
-                          <>
-                            <BookOpen size={16} />
-                            Enroll Now
-                          </>
-                        )}
-                      </button>
                     </div>
-                  ))}
-                </div>
+                  )
+                ))}
 
+                {/* Action Buttons */}
                 <div style={styles.actions}>
                   <button
                     onClick={handleSkipClick}
@@ -444,6 +430,7 @@ const CourseRecommendationModal = ({
   );
 };
 
+// ===== STYLES =====
 const styles = {
   overlay: {
     position: 'fixed',
@@ -453,69 +440,59 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10000,
-    padding: '20px',
-    animation: 'fadeIn 0.3s ease-out'
+    zIndex: 9999,
+    padding: '20px'
   },
   modal: {
-    backgroundColor: '#0f1419',
-    borderRadius: '20px',
     width: '100%',
     maxWidth: '900px',
     maxHeight: '90vh',
-    overflow: 'hidden',
+    background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(7, 11, 20, 0.98) 100%)',
+    borderRadius: '24px',
     border: '1px solid rgba(59, 130, 246, 0.2)',
     boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
     display: 'flex',
-    flexDirection: 'column'
+    flexDirection: 'column',
+    overflow: 'hidden'
   },
-  
-  // 🎉 CELEBRATION HEADER STYLES
-  celebrationHeader: {
+  header: {
     padding: '2.5rem 2rem 2rem',
-    background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.15) 0%, rgba(15, 23, 42, 0.3) 100%)',
+    background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.8) 0%, rgba(30, 41, 59, 0.9) 100%)',
     borderBottom: '1px solid rgba(59, 130, 246, 0.2)',
-    textAlign: 'center'
-  },
-  badgeContainer: {
-    position: 'relative',
-    width: '100px',
-    height: '115px',
-    margin: '0 auto 1.5rem',
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
+    gap: '1.5rem',
+    alignItems: 'flex-start'
   },
-  hexagonSvg: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%'
-  },
-  hexagonContent: {
-    position: 'relative',
-    zIndex: 2,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  achievementText: {
-    textAlign: 'center'
-  },
-  completeText: {
-    fontSize: '12px',
-    fontWeight: '700',
-    color: '#10b981',
-    textTransform: 'uppercase',
-    letterSpacing: '3px',
-    marginBottom: '8px',
+  headerBadge: {
+    width: '80px',
+    height: '80px',
+    borderRadius: '20px',
+    background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(245, 158, 11, 0.3) 100%)',
+    border: '2px solid rgba(251, 191, 36, 0.4)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '4px'
+    flexShrink: 0,
+    boxShadow: '0 10px 30px rgba(251, 191, 36, 0.2)'
   },
-  achievementTitle: {
+  headerContent: {
+    flex: 1
+  },
+  headerLabel: {
+    fontSize: '12px',
+    fontWeight: '700',
+    color: '#10b981',
+    margin: '0 0 8px 0',
+    textTransform: 'uppercase',
+    letterSpacing: '1.5px'
+  },
+  headerTitle: {
     fontSize: '28px',
-    fontWeight: '800',
+    fontWeight: '900',
+    background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
     color: 'white',
     margin: '0 0 4px 0',
     textTransform: 'uppercase',
@@ -530,7 +507,7 @@ const styles = {
   statsRow: {
     display: 'flex',
     gap: '24px',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     margin: '0 0 1rem 0',
     padding: '1rem',
@@ -566,20 +543,13 @@ const styles = {
     color: '#94a3b8',
     lineHeight: '1.6',
     margin: 0,
-    fontStyle: 'italic',
-    maxWidth: '600px',
-    marginLeft: 'auto',
-    marginRight: 'auto'
+    fontStyle: 'italic'
   },
-  
-  // SECTION DIVIDER
   sectionDivider: {
     height: '1px',
     background: 'linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.3), transparent)',
     margin: 0
   },
-  
-  // 📚 COURSE SECTION STYLES
   content: {
     padding: '2rem',
     overflowY: 'auto',
@@ -589,7 +559,7 @@ const styles = {
     display: 'flex',
     gap: '12px',
     alignItems: 'flex-start',
-    marginBottom: '1.5rem',
+    marginBottom: '2rem',
     padding: '1rem',
     background: 'rgba(59, 130, 246, 0.05)',
     borderRadius: '12px',
@@ -618,11 +588,38 @@ const styles = {
     margin: 0,
     lineHeight: '1.5'
   },
+  // ✅ NEW: Language Section Styles
+  languageSection: {
+    marginBottom: '2.5rem'
+  },
+  languageHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '1rem',
+    padding: '12px 16px',
+    background: 'rgba(59, 130, 246, 0.1)',
+    borderRadius: '10px',
+    border: '1px solid rgba(59, 130, 246, 0.2)'
+  },
+  languageSectionTitle: {
+    fontSize: '18px',
+    fontWeight: '700',
+    color: 'white',
+    margin: 0,
+    flex: 1
+  },
+  languageCourseCount: {
+    fontSize: '12px',
+    color: '#64748b',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px'
+  },
   coursesGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: '20px',
-    marginBottom: '2rem'
+    gap: '20px'
   },
   courseCard: {
     padding: '1.5rem',
@@ -699,6 +696,7 @@ const styles = {
     gap: '12px',
     justifyContent: 'flex-end',
     paddingTop: '1rem',
+    marginTop: '1rem',
     borderTop: '1px solid rgba(255, 255, 255, 0.1)'
   },
   button: {
