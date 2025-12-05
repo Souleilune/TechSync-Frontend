@@ -125,7 +125,6 @@ const IsolatedAnimatedBackground = React.memo(() => (
 // Step icons and labels
 const stepIcons = { 1: Code2, 2: BookOpen, 3: Clock, 4: Target };
 const stepLabels = { 1: 'Skills', 2: 'Interests', 3: 'Level', 4: 'Challenge' };
-const stepEmojis = { 1: '💻', 2: '🎯', 3: '⚡', 4: '🏆' };
 
 // Achievement Toast Component
 const AchievementToast = ({ show, message, icon: Icon }) => {
@@ -860,9 +859,6 @@ const handleSkipCourseRecommendations = () => {
       background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.1))',
       boxShadow: '0 0 20px rgba(16, 185, 129, 0.3)'
     },
-    stepEmoji: {
-      fontSize: '10px'
-    },
     stepperLabel: {
       fontSize: '11px',
       fontWeight: '700',
@@ -1194,13 +1190,17 @@ const handleSkipCourseRecommendations = () => {
       border: '1px solid rgba(59, 130, 246, 0.2)',
       padding: '4rem',
       position: 'relative',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      display: 'flex',           // ← Add
+      flexDirection: 'column',   // ← Add
+      alignItems: 'center'       // ← Add
     },
     radarContainer: {
       position: 'relative',
       width: '120px',
       height: '120px',
-      marginBottom: '28px'
+      marginBottom: '28px',
+      margin: '0 auto 28px auto'
     },
     radarRing: {
       position: 'absolute',
@@ -1257,7 +1257,8 @@ const handleSkipCourseRecommendations = () => {
       height: '6px',
       backgroundColor: 'rgba(255, 255, 255, 0.1)',
       borderRadius: '3px',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      margin: '0 auto'
     },
     loadingProgressFill: {
       width: '80px',
@@ -1931,7 +1932,6 @@ const handleSkipCourseRecommendations = () => {
                         ) : (
                           <>
                             <StepIcon size={20} />
-                            <span style={styles.stepEmoji}>{stepEmojis[step]}</span>
                           </>
                         )}
                       </div>
