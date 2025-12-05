@@ -424,6 +424,7 @@ function Onboarding() {
 };
 
   // Handle challenge completion
+  // Handle challenge completion
   const handleChallengeComplete = (result) => {
   console.log('📝 Challenge completed:', result);
 
@@ -434,11 +435,11 @@ function Onboarding() {
     passed: result.score >= 60
   };
 
-  setChallengeResults(prev => {
-    const updated = [...prev, updatedResult];
-    console.log('💾 Saved challenge results:', updated);
-    return updated;
-  });
+  // ✅ FIX: Create updated array immediately to avoid stale state issues
+  const allResults = [...challengeResults, updatedResult];
+  
+  setChallengeResults(allResults);
+  console.log('💾 Saved challenge results:', allResults);
 
   // If beginner, add to beginner list
   if (proficiencyLevel === 'beginner') {
@@ -461,18 +462,24 @@ function Onboarding() {
 
   // Check if more challenges remain
   if (currentChallengeIndex < selectedLanguages.length - 1) {
+    // More challenges to take - move to next one
+    console.log(`➡️ Moving to next challenge (${currentChallengeIndex + 1}/${selectedLanguages.length})`);
     setCurrentChallengeIndex(prev => prev + 1);
   } else {
-    // All challenges complete
+    // ✅ FIX: All challenges complete - use the updated allResults array
+    console.log('🎯 All challenges completed!');
     setAllChallengesComplete(true);
 
-    const beginners = challengeResults.filter(r => 
+    // ✅ FIX: Filter beginners from ALL results including current
+    const beginners = allResults.filter(r => 
       determineProficiencyLevel(r.score) === 'beginner'
     );
 
+    console.log(`👶 Found ${beginners.length} beginner(s):`, beginners.map(b => b.languageName));
+
     if (beginners.length > 0) {
       // Show course recommendations for first beginner language
-      console.log('📚 Showing course recommendations for beginners');
+      console.log('📚 Showing course recommendations for first beginner');
       const firstBeginner = beginners[0];
       setCurrentRecommendationLanguage({
         language_id: firstBeginner.languageId,
