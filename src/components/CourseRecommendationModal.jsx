@@ -113,11 +113,18 @@ const CourseRecommendationModal = ({
   };
 
   const handleContinue = () => {
+    console.log('🔘 Continue clicked with saved courses:', Array.from(savedCourses));
     onContinue(Array.from(savedCourses));
+  };
+
+  const handleSkipClick = () => {
+    console.log('⏭️ Skip clicked');
+    onSkip();
   };
 
   if (proficiencyLevel !== 'beginner') {
     // Not a beginner, skip course recommendations
+    console.log('⏭️ Not a beginner, skipping course recommendations');
     onContinue([]);
     return null;
   }
@@ -132,6 +139,9 @@ const CourseRecommendationModal = ({
         @keyframes shimmer {
           0% { background-position: -1000px 0; }
           100% { background-position: 1000px 0; }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
       `}</style>
 
@@ -157,18 +167,29 @@ const CourseRecommendationModal = ({
                 <div style={styles.spinner} />
                 <p style={styles.loadingText}>Finding the perfect courses for you...</p>
               </div>
-            ) : error ? (
-              <div style={styles.errorContainer}>
-                <p style={styles.errorText}>{error}</p>
-                <button onClick={handleContinue} style={{ ...styles.button, ...styles.primaryButton }}>
-                  Continue Anyway
-                </button>
-              </div>
-            ) : courses.length === 0 ? (
+            ) : error || courses.length === 0 ? (
               <div style={styles.emptyContainer}>
-                <p style={styles.emptyText}>No courses available at the moment.</p>
-                <button onClick={handleContinue} style={{ ...styles.button, ...styles.primaryButton }}>
-                  Continue
+                <div style={styles.emptyIcon}>📚</div>
+                <h3 style={styles.emptyTitle}>No Courses Available Yet</h3>
+                <p style={styles.emptyText}>
+                  {error ? 'We encountered an issue loading courses.' : 'Our course library is being prepared for you.'}
+                  <br/>
+                  Don't worry, you can continue and explore courses later from your dashboard!
+                </p>
+                <button 
+                  onClick={handleContinue} 
+                  style={{ ...styles.button, ...styles.primaryButton }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 8px 30px rgba(59, 130, 246, 0.5)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 20px rgba(59, 130, 246, 0.3)';
+                  }}
+                >
+                  Continue to Dashboard
+                  <ChevronRight size={18} />
                 </button>
               </div>
             ) : (
@@ -235,18 +256,34 @@ const CourseRecommendationModal = ({
 
                 <div style={styles.actions}>
                   <button
-                    onClick={onSkip}
+                    onClick={handleSkipClick}
                     style={{ ...styles.button, ...styles.secondaryButton }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                    }}
                   >
                     Skip for Now
                   </button>
                   <button
                     onClick={handleContinue}
                     style={{ ...styles.button, ...styles.primaryButton }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 8px 30px rgba(59, 130, 246, 0.5)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 4px 20px rgba(59, 130, 246, 0.3)';
+                    }}
                   >
                     {savedCourses.size > 0 
                       ? `Continue with ${savedCourses.size} Course${savedCourses.size > 1 ? 's' : ''}` 
-                      : 'Continue'}
+                      : 'Continue to Dashboard'}
                     <ChevronRight size={18} />
                   </button>
                 </div>
@@ -472,12 +509,25 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     gap: '20px',
-    padding: '60px'
+    padding: '60px 40px',
+    textAlign: 'center'
+  },
+  emptyIcon: {
+    fontSize: '64px',
+    opacity: 0.6
+  },
+  emptyTitle: {
+    fontSize: '20px',
+    fontWeight: '700',
+    color: 'white',
+    margin: 0
   },
   emptyText: {
     color: '#94a3b8',
     fontSize: '16px',
-    textAlign: 'center'
+    lineHeight: '1.6',
+    margin: 0,
+    maxWidth: '500px'
   }
 };
 

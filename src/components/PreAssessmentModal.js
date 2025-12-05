@@ -713,30 +713,30 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
               <div style={styles.resultsContainer}>
                 <div style={{
                   ...styles.resultCard,
-                  borderColor: result.passed ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
+                  borderColor: result.passed ? 'rgba(16, 185, 129, 0.3)' : 'rgba(59, 130, 246, 0.3)',
                   background: result.passed 
                     ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.05) 100%)'
-                    : 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(185, 28, 28, 0.05) 100%)'
+                    : 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%)'
                 }}>
                   <div style={styles.resultHeader}>
                     {result.passed ? (
                       <CheckCircle size={48} color="#10b981" />
                     ) : (
-                      <XCircle size={48} color="#ef4444" />
+                      <Target size={48} color="#3b82f6" />
                     )}
                     <div>
                       <h3 style={{
                         ...styles.resultTitle,
-                        color: result.passed ? '#10b981' : '#ef4444'
+                        color: result.passed ? '#10b981' : '#3b82f6'
                       }}>
-                        {result.passed ? 'Assessment Passed!' : 'Assessment Not Passed'}
+                        Assessment Complete
                       </h3>
                       <p style={styles.resultScore}>Score: {result.score}%</p>
                     </div>
                   </div>
 
                   <div style={styles.resultFeedback}>
-                    {result.evaluation?.feedback || result.feedback || 'Assessment complete'}
+                    {result.evaluation?.feedback || result.feedback || 'Great effort! Keep practicing to improve your skills.'}
                   </div>
 
                   {/* Evaluation Details */}
