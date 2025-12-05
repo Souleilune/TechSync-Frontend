@@ -298,6 +298,7 @@ function Onboarding() {
   const [currentRecommendationLanguage, setCurrentRecommendationLanguage] = useState(null);
   const [enrolledCourses, setEnrolledCourses] = useState([]);
 
+  
   // Load initial data
   useEffect(() => {
     const loadInitialData = async () => {
@@ -353,6 +354,15 @@ function Onboarding() {
       return () => clearTimeout(timer);
     }
   }, [selectionCombo, lastSelectionTime]);
+
+  useEffect(() => {
+  console.log('🔄 Modal state changed:', {
+    showCourseRecommendations,
+    showResultModal,
+    currentStep,
+    allChallengesComplete
+  });
+}, [showCourseRecommendations, showResultModal, currentStep, allChallengesComplete]);
 
   // Show achievement
   const triggerAchievement = (message) => {
@@ -455,37 +465,87 @@ function Onboarding() {
 };
 
 const handleCourseRecommendationComplete = (savedCourseIds) => {
-  console.log('💾 Saved courses:', savedCourseIds);
+  console.log('💾 Continue clicked - Saved courses:', savedCourseIds);
+  console.log('📊 Current state:', {
+    currentRecommendationLanguage,
+    challengeResults,
+    showCourseRecommendations,
+    showResultModal
+  });
+  
+  // Save enrolled courses
   setEnrolledCourses([...enrolledCourses, ...savedCourseIds]);
   
-  // Check if there are more beginner languages to show recommendations for
+  // Get all beginner results
   const beginnerResults = challengeResults.filter(r => r.proficiencyLevel === 'beginner');
+  console.log('👶 Beginner results:', beginnerResults);
+  
+  // Validate current recommendation language
+  if (!currentRecommendationLanguage || !currentRecommendationLanguage.language_id) {
+    console.warn('⚠️ No current recommendation language, going to final results');
+    setShowCourseRecommendations(false);
+    setTimeout(() => {
+      setShowResultModal(true);
+    }, 100);
+    return;
+  }
+  
+  // Find current index in beginner results
   const currentIndex = beginnerResults.findIndex(
     r => r.languageId === currentRecommendationLanguage.language_id
   );
   
-  if (currentIndex < beginnerResults.length - 1) {
-    // Show recommendations for next beginner language
+  console.log('📍 Current index:', currentIndex, '| Total beginners:', beginnerResults.length);
+  
+  // Check if there are more beginner languages (FIXED CONDITION)
+  if (currentIndex >= 0 && currentIndex < beginnerResults.length - 1) {
+    console.log('➡️ Moving to next beginner language');
+    
+    // Get next beginner result
     const nextBeginnerResult = beginnerResults[currentIndex + 1];
     const nextLanguage = selectedLanguages.find(
       lang => lang.language_id === nextBeginnerResult.languageId
     );
     
-    setCurrentRecommendationLanguage({
-      ...nextLanguage,
-      result: nextBeginnerResult
-    });
+    if (nextLanguage) {
+      console.log('✅ Next language found:', nextLanguage.name);
+      setCurrentRecommendationLanguage({
+        ...nextLanguage,
+        result: nextBeginnerResult
+      });
+      // Modal stays open for next language
+    } else {
+      console.error('❌ Next language not found in selectedLanguages');
+      setShowCourseRecommendations(false);
+      setTimeout(() => {
+        setShowResultModal(true);
+      }, 100);
+    }
   } else {
-    // All recommendations shown - proceed to final results
+    console.log('✅ All beginner recommendations complete - showing final results');
+    // Close recommendations, show final results
     setShowCourseRecommendations(false);
-    setShowResultModal(true);
+    setTimeout(() => {
+      setShowResultModal(true);
+    }, 100);
   }
 };
 
 // Add handler for skipping course recommendations:
 const handleSkipCourseRecommendations = () => {
+  console.log('⏭️ Skip button clicked');
+  console.log('📊 Current state before skip:', {
+    showCourseRecommendations,
+    showResultModal
+  });
+  
   setShowCourseRecommendations(false);
-  setShowResultModal(true);
+  
+  // Use setTimeout to ensure state updates properly
+  setTimeout(() => {
+    console.log('⏭️ Setting showResultModal to true');
+    setShowResultModal(true);
+  }, 100);
 };
 
   const handleCompleteOnboarding = async () => {
