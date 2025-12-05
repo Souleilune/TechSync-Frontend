@@ -708,16 +708,6 @@ function App() {
                     </ProtectedRoute>
                   } 
                 />
-
-                <Route 
-                  path="/projects/:projectId/join" 
-                  element={
-                    <ProtectedRoute>
-                      <ProjectJoinPage />
-                    </ProtectedRoute>
-                  } 
-                />
-
                 <Route 
                   path="/projects/:projectId/challenge" 
                   element={

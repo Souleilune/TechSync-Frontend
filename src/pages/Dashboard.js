@@ -1131,32 +1131,25 @@ useEffect(() => {
       setSelectedProject(null);
     };
   // MODIFY THE handleJoinProject FUNCTION TO SHOW MODAL INSTEAD OF NAVIGATE
-  const handleJoinProject = async (project, event) => {
-    event.stopPropagation();
-
-    try {
-      try {
-        await SkillMatchingAPI.updateRecommendationFeedback(
-          project.recommendationId,
-          'applied',
-          null,
-          project.projectId
-        );
-      } catch (feedbackError) {
-        console.warn('Failed to update recommendation feedback:', feedbackError);
-      }
-
-      setShowProjectDetailModal(false);
+  const handleJoinProject = async (project) => {
+  try {
+    const response = await projectService.joinProject(project.id);
+    
+    if (response.success) {
+      // Close modal
       setSelectedProject(null);
       
-      // CHANGED: Show modal instead of navigate
-      setSelectedProjectForChallenge(project);
-      setShowChallengeModal(true);
+      // Show success notification
+      alert(`Successfully joined ${project.title}!`);
       
-    } catch (error) {
-      console.error('Error joining project:', error);
+      // Navigate to project dashboard
+      navigate(`/project/${project.id}/dashboard`);
     }
-  };
+  } catch (error) {
+    console.error('Error joining project:', error);
+    alert(error.response?.data?.message || 'Failed to join project');
+  }
+};
 
   // ADD CHALLENGE MODAL CLOSE HANDLER
   const handleCloseChallengeModal = () => {
