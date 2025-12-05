@@ -105,32 +105,6 @@ const ProjectMatchmaking = ({ onProjectSelect }) => {
     setShowMatchModal(false);
   };
 
-  const handleJoinProject = async (projectId, projectTitle) => {
-  try {
-    setJoining(true);
-    
-    const response = await projectService.joinProject(projectId);
-    
-    if (response.success) {
-      // Show success message
-      alert(`Successfully joined ${projectTitle}!`);
-      
-      // Navigate to project dashboard
-      navigate(`/project/${projectId}/dashboard`);
-      
-      // Or refresh the project list
-      // window.location.reload();
-    } else {
-      alert(response.message || 'Failed to join project');
-    }
-  } catch (error) {
-    console.error('Error joining project:', error);
-    const errorMessage = error.response?.data?.message || 'Failed to join project';
-    alert(errorMessage);
-  } finally {
-    setJoining(false);
-  }
-};
 
   const renderIdleState = () => (
     <div style={styles.idleContainer}>
