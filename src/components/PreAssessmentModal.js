@@ -68,15 +68,19 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
       
       console.log('📦 Challenge response:', response);
 
-      if (response.success && response.data) {
-        setChallenge(response.data);
-        setSubmittedCode(response.data.starter_code || '');
+      // Backend returns: { success: true, data: { challenge: {...}, userRating: ... } }
+      if (response.success && response.data && response.data.challenge) {
+        const challengeData = response.data.challenge;
+        console.log('✅ Challenge loaded:', challengeData);
+        
+        setChallenge(challengeData);
+        setSubmittedCode(challengeData.starter_code || '');
       } else {
         throw new Error('No challenge available for this language');
       }
     } catch (err) {
       console.error('❌ Error loading challenge:', err);
-      setError('Failed to load challenge. Please try again.');
+      setError(err.response?.data?.message || err.message || 'Failed to load challenge. Please try again.');
     } finally {
       setLoading(false);
     }
