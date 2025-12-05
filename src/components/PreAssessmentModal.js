@@ -112,6 +112,26 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
     return () => clearInterval(timer);
   }, [startedAt, challenge, result]);
 
+  useEffect(() => {
+    console.log('🔄 Language changed to:', language.name);
+    
+    // Reset all assessment state
+    setResult(null);
+    setSubmittedCode('');
+    setStartedAt(null);
+    setTimeRemaining(null);
+    setError(null);
+    setShowHints(false);
+    setCodeValidation(null);
+    setTabSwitchCount(0);
+    setShowTabWarning(false);
+    setTabWarningMessage('');
+    setIsFocused(true);
+    
+    // Reload challenge for new language
+    loadChallenge();
+  }, [language.language_id]);
+
   // Tab switching detection (migrated from ProjectChallengeInterface)
   useEffect(() => {
     if (!startedAt) return;

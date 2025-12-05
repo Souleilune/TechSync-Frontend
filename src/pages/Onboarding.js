@@ -2219,6 +2219,7 @@ const handleSkipCourseRecommendations = () => {
         {/* Step 4: Challenge */}
           {currentStep === 4 && !allChallengesComplete && (
               <PreAssessmentModal
+                key={selectedLanguages[currentChallengeIndex]?.language_id}
                 language={selectedLanguages[currentChallengeIndex]}
                 onComplete={handleChallengeComplete}
                 onClose={() => setCurrentStep(3)}
