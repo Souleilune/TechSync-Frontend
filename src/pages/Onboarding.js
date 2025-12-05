@@ -292,7 +292,6 @@ function Onboarding() {
   // Challenge states
   const [currentChallengeIndex, setCurrentChallengeIndex] = useState(0);
   const [challengeResults, setChallengeResults] = useState([]);
-  const [showResultModal, setShowResultModal] = useState(false);
   const [allChallengesComplete, setAllChallengesComplete] = useState(false);
   const [showCourseRecommendations, setShowCourseRecommendations] = useState(false);
   const [currentRecommendationLanguage, setCurrentRecommendationLanguage] = useState(null);
@@ -425,128 +424,104 @@ function Onboarding() {
 
   // Handle challenge completion
   const handleChallengeComplete = (result) => {
-  console.log('📝 Challenge result:', result);
-  
-  const updatedResults = [...challengeResults, {
-    languageId: selectedLanguages[currentChallengeIndex].language_id,
-    languageName: selectedLanguages[currentChallengeIndex].name,
-    ...result
-  }];
-  
-  setChallengeResults(updatedResults);
+  console.log('📝 Challenge completed:', result);
 
-  // Check if this was the last challenge
+  const proficiencyLevel = determineProficiencyLevel(result.score);
+  const updatedResult = {
+    ...result,
+    proficiencyLevel,
+    passed: result.score >= 60
+  };
+
+  setChallengeResults(prev => {
+    const updated = [...prev, updatedResult];
+    console.log('💾 Saved challenge results:', updated);
+    return updated;
+  });
+
+  // If beginner, add to beginner list
+  if (proficiencyLevel === 'beginner') {
+    console.log(`👶 ${result.languageName} identified as beginner`);
+    
+    const beginnerResult = {
+      languageId: result.languageId,
+      languageName: result.languageName,
+      score: result.score,
+      proficiencyLevel,
+      result: updatedResult
+    };
+
+    setBeginnerLanguages(prev => {
+      const updated = [...prev, beginnerResult];
+      console.log('👶 Updated beginner list:', updated);
+      return updated;
+    });
+  }
+
+  // Check if more challenges remain
   if (currentChallengeIndex < selectedLanguages.length - 1) {
-    // More challenges remaining - move to next
-    setCurrentChallengeIndex(currentChallengeIndex + 1);
+    setCurrentChallengeIndex(prev => prev + 1);
   } else {
     // All challenges complete
     setAllChallengesComplete(true);
-    
-    // Check if any results are for beginners
-    const beginnerResults = updatedResults.filter(r => r.proficiencyLevel === 'beginner');
-    
-    if (beginnerResults.length > 0) {
-      // Show course recommendations for the first beginner language
-      const firstBeginnerLanguage = selectedLanguages.find(
-        lang => beginnerResults.some(r => r.languageId === lang.language_id)
-      );
-      
+
+    const beginners = challengeResults.filter(r => 
+      determineProficiencyLevel(r.score) === 'beginner'
+    );
+
+    if (beginners.length > 0) {
+      // Show course recommendations for first beginner language
+      console.log('📚 Showing course recommendations for beginners');
+      const firstBeginner = beginners[0];
       setCurrentRecommendationLanguage({
-        ...firstBeginnerLanguage,
-        result: beginnerResults.find(r => r.languageId === firstBeginnerLanguage.language_id)
+        language_id: firstBeginner.languageId,
+        name: firstBeginner.languageName,
+        result: firstBeginner
       });
       setShowCourseRecommendations(true);
     } else {
-      // No beginners - show final results modal
-      setShowResultModal(true);
+      // No beginners - complete onboarding directly!
+      console.log('✅ No beginners detected - completing onboarding');
+      handleCompleteOnboarding();
     }
   }
 };
 
-const handleCourseRecommendationComplete = (savedCourseIds) => {
-  console.log('💾 Continue clicked - Saved courses:', savedCourseIds);
-  console.log('📊 Current state:', {
-    currentRecommendationLanguage,
-    challengeResults,
-    showCourseRecommendations,
-    showResultModal
-  });
+const handleCourseRecommendationComplete = async (enrolledCourses) => {
+  console.log('💾 Course selection complete:', enrolledCourses);
   
-  // Save enrolled courses
-  setEnrolledCourses([...enrolledCourses, ...savedCourseIds]);
+  // Find current beginner language index
+  const beginnerResults = challengeResults.filter(r => 
+    determineProficiencyLevel(r.score) === 'beginner'
+  );
   
-  // Get all beginner results
-  const beginnerResults = challengeResults.filter(r => r.proficiencyLevel === 'beginner');
-  console.log('👶 Beginner results:', beginnerResults);
-  
-  // Validate current recommendation language
-  if (!currentRecommendationLanguage || !currentRecommendationLanguage.language_id) {
-    console.warn('⚠️ No current recommendation language, going to final results');
-    setShowCourseRecommendations(false);
-    setTimeout(() => {
-      setShowResultModal(true);
-    }, 100);
-    return;
-  }
-  
-  // Find current index in beginner results
   const currentIndex = beginnerResults.findIndex(
     r => r.languageId === currentRecommendationLanguage.language_id
   );
-  
-  console.log('📍 Current index:', currentIndex, '| Total beginners:', beginnerResults.length);
-  
-  // Check if there are more beginner languages (FIXED CONDITION)
+
+  console.log('📍 Current recommendation index:', currentIndex, 'of', beginnerResults.length);
+
+  // Check if there are more beginner languages to process
   if (currentIndex >= 0 && currentIndex < beginnerResults.length - 1) {
-    console.log('➡️ Moving to next beginner language');
-    
-    // Get next beginner result
+    // More beginner languages - show next one
     const nextBeginnerResult = beginnerResults[currentIndex + 1];
-    const nextLanguage = selectedLanguages.find(
-      lang => lang.language_id === nextBeginnerResult.languageId
-    );
+    console.log('➡️ Moving to next beginner language:', nextBeginnerResult.languageName);
     
-    if (nextLanguage) {
-      console.log('✅ Next language found:', nextLanguage.name);
-      setCurrentRecommendationLanguage({
-        ...nextLanguage,
-        result: nextBeginnerResult
-      });
-      // Modal stays open for next language
-    } else {
-      console.error('❌ Next language not found in selectedLanguages');
-      setShowCourseRecommendations(false);
-      setTimeout(() => {
-        setShowResultModal(true);
-      }, 100);
-    }
+    setCurrentRecommendationLanguage({
+      language_id: nextBeginnerResult.languageId,
+      name: nextBeginnerResult.languageName,
+      result: nextBeginnerResult
+    });
   } else {
-    console.log('✅ All beginner recommendations complete - showing final results');
-    // Close recommendations, show final results
+    // No more beginner languages - complete onboarding directly!
+    console.log('✅ All recommendations complete - completing onboarding...');
     setShowCourseRecommendations(false);
-    setTimeout(() => {
-      setShowResultModal(true);
-    }, 100);
+    
+    // Complete onboarding immediately
+    await handleCompleteOnboarding();
   }
 };
 
-// Add handler for skipping course recommendations:
-const handleSkipCourseRecommendations = () => {
-  console.log('⏭️ Skip button clicked');
-  console.log('📊 Current state before skip:', {
-    showCourseRecommendations,
-    showResultModal
-  });
-  
-  setShowCourseRecommendations(false);
-  
-  // Use setTimeout to ensure state updates properly
-  setTimeout(() => {
-    console.log('⏭️ Setting showResultModal to true');
-    setShowResultModal(true);
-  }, 100);
-};
 
   const handleCompleteOnboarding = async () => {
   try {
@@ -2224,16 +2199,7 @@ const handleSkipCourseRecommendations = () => {
           />
         )}
 
-        {/* Result Modal */}
-        {showResultModal && (
-          <AssessmentResultModal
-            results={challengeResults}
-            selectedLanguages={selectedLanguages}
-            onComplete={handleCompleteOnboarding}
-            loading={loading}
-            determineProficiencyLevel={determineProficiencyLevel}
-          />
-        )}
+        
       </div>
     </div>
   );
