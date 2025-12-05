@@ -2047,14 +2047,6 @@ function Onboarding() {
             </div>
           )}
 
-          {/* Step 4: Challenge */}
-          {currentStep === 4 && !allChallengesComplete && (
-              <PreAssessmentModal
-                language={selectedLanguages[currentChallengeIndex]}
-                onComplete={handleChallengeComplete}
-                onClose={() => setCurrentStep(3)}
-              />
-          )}
 
           {/* Navigation */}
           {currentStep !== 4 && (
@@ -2088,6 +2080,15 @@ function Onboarding() {
             </div>
           )}
         </div>
+
+        {/* Step 4: Challenge */}
+          {currentStep === 4 && !allChallengesComplete && (
+              <PreAssessmentModal
+                language={selectedLanguages[currentChallengeIndex]}
+                onComplete={handleChallengeComplete}
+                onClose={() => setCurrentStep(3)}
+              />
+          )}
 
         {/* Result Modal */}
         {showResultModal && (
