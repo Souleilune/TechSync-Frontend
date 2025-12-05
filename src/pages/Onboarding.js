@@ -2048,22 +2048,23 @@ function Onboarding() {
           )}
 
 
-          <div style={styles.navigationButtons}>
-            {currentStep > 1 && (
-              <button
-                onClick={handlePrevStep}
-                className="nav-button secondary-button"
-                style={{
-                  ...styles.navButton,
-                  ...styles.secondaryButton
-                }}
-              >
-                <ArrowLeft size={18} />
-                Back
-              </button>
-            )}
+          {/* Navigation */}
+          {currentStep !== 4 && (
+            <div style={styles.navigationButtons}>
+              {currentStep > 1 && (
+                <button
+                  onClick={handlePrevStep}
+                  className="nav-button secondary-button"
+                  style={{
+                    ...styles.navButton,
+                    ...styles.secondaryButton
+                  }}
+                >
+                  <ArrowLeft size={18} />
+                  Back
+                </button>
+              )}
 
-            {currentStep < 4 && (
               <button
                 onClick={handleNextStep}
                 className="nav-button primary-button primary-nav-button"
@@ -2076,9 +2077,18 @@ function Onboarding() {
                 {currentStep === 3 ? 'Start Challenge' : 'Continue'}
                 <ChevronRight size={18} />
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
+
+        {/* Step 4: Challenge */}
+          {currentStep === 4 && !allChallengesComplete && (
+              <PreAssessmentModal
+                language={selectedLanguages[currentChallengeIndex]}
+                onComplete={handleChallengeComplete}
+                onClose={() => setCurrentStep(3)}
+              />
+          )}
 
         {/* Result Modal */}
         {showResultModal && (
@@ -2091,15 +2101,6 @@ function Onboarding() {
           />
         )}
       </div>
-      
-      {/* Step 4: Challenge - Rendered OUTSIDE container for full viewport coverage */}
-      {currentStep === 4 && !allChallengesComplete && (
-        <PreAssessmentModal
-          language={selectedLanguages[currentChallengeIndex]}
-          onComplete={handleChallengeComplete}
-          onClose={() => setCurrentStep(3)}
-        />
-      )}
     </div>
   );
 }
