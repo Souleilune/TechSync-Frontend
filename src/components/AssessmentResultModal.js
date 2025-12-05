@@ -2,21 +2,76 @@
 import React, { useState, useEffect } from 'react';
 import { Trophy, Target, TrendingUp, Award, CheckCircle2, XCircle } from 'lucide-react';
 
-const AssessmentResultModal = ({ assessment, onContinue, loading }) => {
-  const [animationPhase, setAnimationPhase] = useState('entering');
+const AssessmentResultModal = ({ 
+  results, 
+  selectedLanguages, 
+  onComplete, 
+  loading, 
+  determineProficiencyLevel 
+}) => {
+  const [animationPhase, setAnimationPhase] = useState('scanning');
 
   useEffect(() => {
-    // Animation sequence
-    const timer1 = setTimeout(() => setAnimationPhase('scanning'), 500);
-    const timer2 = setTimeout(() => setAnimationPhase('analyzing'), 1500);
-    const timer3 = setTimeout(() => setAnimationPhase('complete'), 2500);
+    const phaseTimeline = [
+      { phase: 'scanning', duration: 1500 },
+      { phase: 'analyzing', duration: 1500 },
+      { phase: 'complete', duration: 0 }
+    ];
 
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
+    let currentIndex = 0;
+    const runPhase = () => {
+      if (currentIndex < phaseTimeline.length) {
+        const current = phaseTimeline[currentIndex];
+        setAnimationPhase(current.phase);
+        if (current.duration > 0) {
+          setTimeout(() => {
+            currentIndex++;
+            runPhase();
+          }, current.duration);
+        }
+      }
     };
+
+    runPhase();
   }, []);
+
+  const calculateAssessment = () => {
+    console.log('📊 Calculating assessment from results:', results);
+    
+    if (!results || results.length === 0) {
+      console.warn('⚠️ No results provided to AssessmentResultModal');
+      return {
+        averageScore: 0,
+        passedChallenges: 0,
+        totalChallenges: 0,
+        results: []
+      };
+    }
+
+    const totalScore = results.reduce((sum, r) => sum + (r.score || 0), 0);
+    const averageScore = Math.round(totalScore / results.length);
+    const passedChallenges = results.filter(r => r.passed).length;
+
+    const processedResults = results.map(r => ({
+      languageName: r.languageName,
+      score: r.score || 0,
+      passed: r.passed || false,
+      proficiencyLevel: r.proficiencyLevel || determineProficiencyLevel(r.score || 0)
+    }));
+
+    const assessment = {
+      averageScore,
+      passedChallenges,
+      totalChallenges: results.length,
+      results: processedResults
+    };
+
+    console.log('✅ Calculated assessment:', assessment);
+    return assessment;
+  };
+
+  const assessment = calculateAssessment();
+
 
   const getOverallRank = (score) => {
     if (score >= 90) return { level: 'Expert', color: '#8b5cf6', icon: '👑', glow: 'rgba(139, 92, 246, 0.4)' };

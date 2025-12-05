@@ -22,43 +22,71 @@ const CourseRecommendationModal = ({
   }, [language, proficiencyLevel]);
 
   const loadCourseRecommendations = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  try {
+    setLoading(true);
+    setError(null);
 
-      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-      const response = await fetch(`${API_URL}/recommendations/challenge-failure`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          challengeId: 'onboarding-assessment',
-          attemptCount: 15, // High count to ensure beginner resources
-          programmingLanguageId: language.language_id,
-          difficultyLevel: 'beginner'
-        })
-      });
-
-      const data = await response.json();
-      
-      if (data.success && data.resources) {
-        // Filter for internal courses only
-        const internalCourses = data.resources.filter(
-          resource => resource.provider?.toLowerCase() === 'internal_course'
-        );
-        setCourses(internalCourses);
-      } else {
-        throw new Error('Failed to load course recommendations');
-      }
-    } catch (err) {
-      console.error('Error loading courses:', err);
-      setError('Failed to load course recommendations');
-    } finally {
+    const token = localStorage.getItem('token');
+    
+    // Check if token exists
+    if (!token) {
+      console.error('❌ No authentication token found');
+      setError('Authentication required');
       setLoading(false);
+      // Skip to completion since we can't load courses
+      setTimeout(() => {
+        onContinue([]);
+      }, 1000);
+      return;
     }
-  };
+
+    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+    const response = await fetch(`${API_URL}/recommendations/challenge-failure`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}` // ✅ Add Bearer prefix
+      },
+      body: JSON.stringify({
+        challengeId: 'onboarding-assessment',
+        attemptCount: 15,
+        programmingLanguageId: language.language_id,
+        difficultyLevel: 'beginner'
+      })
+    });
+
+    // Handle 401 specifically
+    if (response.status === 401) {
+      console.error('❌ Token expired or invalid');
+      setError('Session expired');
+      setLoading(false);
+      // Skip to completion
+      setTimeout(() => {
+        onContinue([]);
+      }, 1000);
+      return;
+    }
+
+    const data = await response.json();
+    
+    if (data.success && data.resources) {
+      const internalCourses = data.resources.filter(
+        resource => resource.provider?.toLowerCase() === 'internal_course'
+      );
+      setCourses(internalCourses);
+    } else {
+      throw new Error('Failed to load course recommendations');
+    }
+  } catch (err) {
+    console.error('Error loading courses:', err);
+    setError('Unable to load courses');
+    setLoading(false);
+    // Don't block the flow - allow user to continue
+    // They can still complete onboarding without course recommendations
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleEnrollCourse = async (course) => {
     try {
