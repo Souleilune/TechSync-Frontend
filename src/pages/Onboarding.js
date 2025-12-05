@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { onboardingService } from '../services/onboardingService';
+import CourseRecommendationModal from '../components/CourseRecommendationModal';
 import { 
   ArrowLeft, 
   Target, 
@@ -293,6 +294,9 @@ function Onboarding() {
   const [challengeResults, setChallengeResults] = useState([]);
   const [showResultModal, setShowResultModal] = useState(false);
   const [allChallengesComplete, setAllChallengesComplete] = useState(false);
+  const [showCourseRecommendations, setShowCourseRecommendations] = useState(false);
+  const [currentRecommendationLanguage, setCurrentRecommendationLanguage] = useState(null);
+  const [enrolledCourses, setEnrolledCourses] = useState([]);
 
   // Load initial data
   useEffect(() => {
@@ -404,79 +408,129 @@ function Onboarding() {
 
   // Handle challenge completion
   const handleChallengeComplete = (result) => {
-    const updatedResults = [...challengeResults, {
-      languageId: selectedLanguages[currentChallengeIndex].language_id,
-      languageName: selectedLanguages[currentChallengeIndex].name,
-      ...result
-    }];
+  console.log('📝 Challenge result:', result);
+  
+  const updatedResults = [...challengeResults, {
+    languageId: selectedLanguages[currentChallengeIndex].language_id,
+    languageName: selectedLanguages[currentChallengeIndex].name,
+    ...result
+  }];
+  
+  setChallengeResults(updatedResults);
+
+  // Check if this was the last challenge
+  if (currentChallengeIndex < selectedLanguages.length - 1) {
+    // More challenges remaining - move to next
+    setCurrentChallengeIndex(currentChallengeIndex + 1);
+  } else {
+    // All challenges complete
+    setAllChallengesComplete(true);
     
-    setChallengeResults(updatedResults);
-
-    if (currentChallengeIndex < selectedLanguages.length - 1) {
-      setCurrentChallengeIndex(currentChallengeIndex + 1);
+    // Check if any results are for beginners
+    const beginnerResults = updatedResults.filter(r => r.proficiencyLevel === 'beginner');
+    
+    if (beginnerResults.length > 0) {
+      // Show course recommendations for the first beginner language
+      const firstBeginnerLanguage = selectedLanguages.find(
+        lang => beginnerResults.some(r => r.languageId === lang.language_id)
+      );
+      
+      setCurrentRecommendationLanguage({
+        ...firstBeginnerLanguage,
+        result: beginnerResults.find(r => r.languageId === firstBeginnerLanguage.language_id)
+      });
+      setShowCourseRecommendations(true);
     } else {
-      setAllChallengesComplete(true);
+      // No beginners - show final results modal
       setShowResultModal(true);
-      triggerAchievement('Challenge Complete!');
     }
-  };
+  }
+};
 
-  const determineProficiencyLevel = (score) => {
-    if (score >= 90) return 'expert';
-    if (score >= 75) return 'advanced';
-    if (score >= 60) return 'intermediate';
-    return 'beginner';
-  };
+const handleCourseRecommendationComplete = (savedCourseIds) => {
+  console.log('💾 Saved courses:', savedCourseIds);
+  setEnrolledCourses([...enrolledCourses, ...savedCourseIds]);
+  
+  // Check if there are more beginner languages to show recommendations for
+  const beginnerResults = challengeResults.filter(r => r.proficiencyLevel === 'beginner');
+  const currentIndex = beginnerResults.findIndex(
+    r => r.languageId === currentRecommendationLanguage.language_id
+  );
+  
+  if (currentIndex < beginnerResults.length - 1) {
+    // Show recommendations for next beginner language
+    const nextBeginnerResult = beginnerResults[currentIndex + 1];
+    const nextLanguage = selectedLanguages.find(
+      lang => lang.language_id === nextBeginnerResult.languageId
+    );
+    
+    setCurrentRecommendationLanguage({
+      ...nextLanguage,
+      result: nextBeginnerResult
+    });
+  } else {
+    // All recommendations shown - proceed to final results
+    setShowCourseRecommendations(false);
+    setShowResultModal(true);
+  }
+};
+
+// Add handler for skipping course recommendations:
+const handleSkipCourseRecommendations = () => {
+  setShowCourseRecommendations(false);
+  setShowResultModal(true);
+};
 
   const handleCompleteOnboarding = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      setSuccessMessage('');
+  try {
+    setLoading(true);
+    setError('');
+    setSuccessMessage('');
 
-      const languagesWithProficiency = selectedLanguages.map((lang) => {
-        const result = challengeResults.find(r => r.languageId === lang.language_id);
-        const proficiencyLevel = result 
-          ? determineProficiencyLevel(result.score)
-          : 'beginner';
+    const languagesWithProficiency = selectedLanguages.map((lang) => {
+      const result = challengeResults.find(r => r.languageId === lang.language_id);
+      const proficiencyLevel = result 
+        ? determineProficiencyLevel(result.score)
+        : 'beginner';
 
-        return {
-          language_id: lang.language_id,
-          proficiency_level: proficiencyLevel,
-          years_experience: yearsExperience || 0
-        };
-      });
+      return {
+        language_id: lang.language_id,
+        proficiency_level: proficiencyLevel,
+        years_experience: yearsExperience || 0
+      };
+    });
 
-      const result = await onboardingService.completeOnboarding({
-        languages: languagesWithProficiency,
-        topics: selectedTopics,
-        years_experience: yearsExperience
-      }, token);
+    const result = await onboardingService.completeOnboarding({
+      languages: languagesWithProficiency,
+      topics: selectedTopics,
+      years_experience: yearsExperience
+    }, token);
 
-      if (result.success) {
-        setSuccessMessage('Onboarding completed successfully!');
-        triggerAchievement('Welcome to TechSync!');
-        
-        if (result.data?.user) {
-          await updateUser(result.data.user, true);
-        } else {
-          await refreshUser();
-        }
-        
-        setTimeout(() => {
-          navigate('/');
-        }, 2000);
+    if (result.success) {
+      setSuccessMessage('Onboarding completed successfully!');
+      triggerAchievement('Welcome to TechSync!');
+      
+      if (result.data?.user) {
+        await updateUser(result.data.user, true);
       } else {
-        setError(result.message || 'Failed to complete onboarding.');
+        await refreshUser();
       }
-
-    } catch (error) {
-      console.error('Complete onboarding error:', error);
-      setError(error.message || 'Failed to complete onboarding.');
-    } finally {
-      setLoading(false);
+      
+      // Navigate to dashboard after 2 seconds
+      setTimeout(() => {
+        navigate('/'); // This goes to Dashboard.js
+      }, 2000);
+    } else {
+      setError(result.message || 'Failed to complete onboarding.');
     }
-  };
+
+  } catch (error) {
+    console.error('Complete onboarding error:', error);
+    setError(error.message || 'Failed to complete onboarding.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleNextStep = () => {
     setError('');
@@ -2089,6 +2143,19 @@ function Onboarding() {
                 onClose={() => setCurrentStep(3)}
               />
           )}
+
+          {showCourseRecommendations && currentRecommendationLanguage && (
+          <CourseRecommendationModal
+            language={{
+              language_id: currentRecommendationLanguage.language_id,
+              name: currentRecommendationLanguage.name
+            }}
+            proficiencyLevel={currentRecommendationLanguage.result?.proficiencyLevel}
+            score={currentRecommendationLanguage.result?.score}
+            onContinue={handleCourseRecommendationComplete}
+            onSkip={handleSkipCourseRecommendations}
+          />
+        )}
 
         {/* Result Modal */}
         {showResultModal && (
