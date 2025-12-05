@@ -240,27 +240,28 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
   `;
 
   const styles = {
-    overlay: {
-      position: 'fixed',
-      inset: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.9)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-      padding: '1rem',
-      backdropFilter: 'blur(4px)'
-    },
+   overlay: {
+    position: 'fixed',
+    inset: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    padding: '2rem',  // Changed from '1rem' for more breathing room
+    backdropFilter: 'blur(4px)'
+  },
     modal: {
       position: 'relative',
       backgroundColor: '#0f1116',
       borderRadius: '20px',
-      width: '100%',
+      width: '95vw',  // Changed from '100%'
       maxWidth: '950px',
+      minWidth: '320px',  // Added minimum width
       maxHeight: '90vh',
       overflow: 'hidden',
       border: '1px solid rgba(59, 130, 246, 0.2)',
-      animation: 'borderGlow 4s ease-in-out infinite'
+      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)'  // Added for better visibility
     },
     gridOverlay: {
       position: 'absolute',
