@@ -443,7 +443,7 @@ const ProjectDetailModal = ({ project, isOpen, onClose, onJoin, isLocked, userPr
                       }}
                     >
                       <User size={14} />
-                      Or manage all languages in your profile
+                      Retake the assessment to improve your match score
                       <ArrowRight size={14} />
                     </button>
                   </div>
