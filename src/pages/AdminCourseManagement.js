@@ -308,7 +308,11 @@ function AdminCourseManagement() {
             </thead>
             <tbody>
               {courses.map(course => (
-                <tr key={course.id}>
+                <tr 
+                  key={course.id}
+                  onClick={() => navigate(`/admin/courses/${course.id}/edit`)}
+                  style={{ cursor: 'pointer' }}
+                >
                   <td>
                     <div className="course-info">
                       <span className="course-emoji">{course.icon_emoji}</span>
@@ -338,32 +342,44 @@ function AdminCourseManagement() {
                       {course.is_published ? 'Published' : 'Draft'}
                     </span>
                   </td>
-                  <td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     <div className="action-buttons">
                       <button
                         className="btn-icon"
-                        onClick={() => navigate(`/admin/courses/${course.id}`)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/admin/courses/${course.id}/edit`);
+                        }}
                         title="Edit Course"
                       >
                         <Edit size={16} />
                       </button>
                       <button
                         className="btn-icon"
-                        onClick={() => handleTogglePublish(course)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTogglePublish(course);
+                        }}
                         title={course.is_published ? 'Unpublish' : 'Publish'}
                       >
                         {course.is_published ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
                       <button
                         className="btn-icon"
-                        onClick={() => handleDuplicateCourse(course.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDuplicateCourse(course.id);
+                        }}
                         title="Duplicate Course"
                       >
                         <Copy size={16} />
                       </button>
                       <button
                         className="btn-icon btn-danger"
-                        onClick={() => handleDeleteCourse(course.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCourse(course.id);
+                        }}
                         title="Delete Course"
                       >
                         <Trash2 size={16} />
