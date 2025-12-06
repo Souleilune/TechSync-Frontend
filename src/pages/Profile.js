@@ -220,7 +220,18 @@ function Profile() {
       detail: { collapsed: newCollapsedState }
     }));
   };
-
+  
+const fetchUserProfile = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    const response = await authService.getProfile(token);
+    if (response.success && response.data && response.data.user) {
+      await updateUser(response.data.user, true);
+    }
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+  }
+};
   // Handle retake assessment button click
 const handleRetakeAssessment = (userLanguage) => {
   setSelectedLanguageForAssessment({
