@@ -12,6 +12,9 @@ function AdminCourseEditor() {
   const { courseId } = useParams();
   const navigate = useNavigate();
   
+  // ✅ FIX: Use environment variable for API URL (same pattern as other pages)
+  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+  
   const [course, setCourse] = useState(null);
   const [modules, setModules] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +33,8 @@ function AdminCourseEditor() {
   const fetchCourseDetails = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/admin/courses/${courseId}`, {
+      // ✅ FIX: Use API_URL constant
+      const response = await fetch(`${API_URL}/admin/courses/${courseId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -64,7 +68,8 @@ function AdminCourseEditor() {
     if (!window.confirm('Delete this module and all its lessons?')) return;
 
     try {
-      const response = await fetch(`/api/admin/courses/modules/${moduleId}`, {
+      // ✅ FIX: Use API_URL constant
+      const response = await fetch(`${API_URL}/admin/courses/modules/${moduleId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -86,7 +91,8 @@ function AdminCourseEditor() {
     if (!window.confirm('Delete this lesson?')) return;
 
     try {
-      const response = await fetch(`/api/admin/courses/lessons/${lessonId}`, {
+      // ✅ FIX: Use API_URL constant
+      const response = await fetch(`${API_URL}/admin/courses/lessons/${lessonId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -208,27 +214,17 @@ function AdminCourseEditor() {
       <div className="modules-list">
         {modules.length === 0 ? (
           <div className="no-modules">
-            <BookOpen className="icon-large" />
-            <h3>No modules yet</h3>
-            <p>Get started by creating your first module (Week 1)</p>
-            <button 
-              className="btn-primary"
-              onClick={() => {
-                setSelectedModule(null);
-                setShowModuleModal(true);
-              }}
-            >
-              <Plus className="icon" /> Create First Module
-            </button>
-            <div className="help-text">
-              <p><strong>💡 Tip:</strong> For an 8-week course, create 8 modules</p>
-              <p>Each module can contain multiple lessons (text, video, coding exercises, quizzes)</p>
-            </div>
+            <BookOpen size={48} />
+            <h3>No Modules Yet</h3>
+            <p className="help-text">
+              Get started by creating your first module. <br />
+              Each course typically has <strong>8 modules</strong> (one per week).
+            </p>
           </div>
         ) : (
           modules
             .sort((a, b) => a.order_index - b.order_index)
-            .map((module, index) => (
+            .map((module) => (
               <div key={module.id} className="module-card">
                 <div className="module-header">
                   <button
@@ -244,58 +240,61 @@ function AdminCourseEditor() {
 
                   <div className="module-info">
                     <div className="module-title">
-                      <span className="module-number">Week {index + 1}</span>
+                      <span className="module-number">Week {module.order_index + 1}</span>
                       <h3>{module.title}</h3>
                     </div>
                     {module.description && (
                       <p className="module-description">{module.description}</p>
                     )}
                     <div className="module-meta">
-                      <span>{module.course_lessons?.length || 0} lessons</span>
-                      {module.estimated_duration_minutes && (
-                        <span>{module.estimated_duration_minutes} min</span>
+                      <span>
+                        <FileText className="icon-small" />
+                        {module.course_lessons?.length || 0} lessons
+                      </span>
+                      {module.estimated_duration_minutes > 0 && (
+                        <span>
+                          <Clock className="icon-small" />
+                          {module.estimated_duration_minutes} min
+                        </span>
                       )}
-                      {module.is_published ? (
-                        <span className="status-published"><Eye className="icon-small" /> Published</span>
-                      ) : (
-                        <span className="status-draft"><EyeOff className="icon-small" /> Draft</span>
-                      )}
+                      <span className={module.is_published ? 'status-published' : 'status-draft'}>
+                        {module.is_published ? (
+                          <><Eye className="icon-small" /> Published</>
+                        ) : (
+                          <><EyeOff className="icon-small" /> Draft</>
+                        )}
+                      </span>
                     </div>
                   </div>
 
                   <div className="module-actions">
                     <button
                       className="btn-icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedModule(module);
-                        setShowModuleModal(true);
-                      }}
-                      title="Edit Module"
-                    >
-                      <Edit className="icon" />
-                    </button>
-                    <button
-                      className="btn-icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      onClick={() => {
                         setSelectedModule(module);
                         setSelectedLesson(null);
                         setShowLessonModal(true);
                       }}
                       title="Add Lesson"
                     >
-                      <Plus className="icon" />
+                      <Plus size={16} />
                     </button>
                     <button
-                      className="btn-icon danger"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteModule(module.id);
+                      className="btn-icon"
+                      onClick={() => {
+                        setSelectedModule(module);
+                        setShowModuleModal(true);
                       }}
+                      title="Edit Module"
+                    >
+                      <Edit size={16} />
+                    </button>
+                    <button
+                      className="btn-icon btn-danger"
+                      onClick={() => handleDeleteModule(module.id)}
                       title="Delete Module"
                     >
-                      <Trash2 className="icon" />
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 </div>
@@ -305,36 +304,38 @@ function AdminCourseEditor() {
                     {module.course_lessons && module.course_lessons.length > 0 ? (
                       module.course_lessons
                         .sort((a, b) => a.order_index - b.order_index)
-                        .map((lesson, lessonIndex) => (
+                        .map((lesson) => (
                           <div key={lesson.id} className="lesson-item">
                             <div className="lesson-icon">
-                              {lesson.lesson_type === 'video' && <Video className="icon" />}
-                              {lesson.lesson_type === 'text' && <FileText className="icon" />}
-                              {lesson.lesson_type === 'coding' && <Code className="icon" />}
-                              {lesson.lesson_type === 'quiz' && <CheckSquare className="icon" />}
+                              {lesson.lesson_type === 'video' && <Video size={16} />}
+                              {lesson.lesson_type === 'text' && <FileText size={16} />}
+                              {lesson.lesson_type === 'coding' && <Code size={16} />}
+                              {lesson.lesson_type === 'quiz' && <CheckSquare size={16} />}
+                              {lesson.lesson_type === 'project' && <BookOpen size={16} />}
                             </div>
 
                             <div className="lesson-info">
-                              <div className="lesson-title">
-                                <span className="lesson-number">{lessonIndex + 1}.</span>
-                                {lesson.title}
-                              </div>
+                              <div className="lesson-title">{lesson.title}</div>
                               <div className="lesson-meta">
-                                <span className={`lesson-type lesson-type-${lesson.lesson_type}`}>
-                                  {lesson.lesson_type}
-                                </span>
-                                {lesson.estimated_duration_minutes && (
-                                  <span><Clock className="icon-tiny" /> {lesson.estimated_duration_minutes} min</span>
+                                <span className="lesson-type">{lesson.lesson_type}</span>
+                                {lesson.estimated_duration_minutes > 0 && (
+                                  <>
+                                    <span className="separator">•</span>
+                                    <span>{lesson.estimated_duration_minutes} min</span>
+                                  </>
                                 )}
                                 {lesson.is_free && (
-                                  <span className="free-badge">FREE</span>
+                                  <>
+                                    <span className="separator">•</span>
+                                    <span className="free-badge">Free Preview</span>
+                                  </>
                                 )}
                               </div>
                             </div>
 
                             <div className="lesson-actions">
                               <button
-                                className="btn-icon-small"
+                                className="btn-icon"
                                 onClick={() => {
                                   setSelectedModule(module);
                                   setSelectedLesson(lesson);
@@ -342,14 +343,14 @@ function AdminCourseEditor() {
                                 }}
                                 title="Edit Lesson"
                               >
-                                <Edit className="icon" />
+                                <Edit size={14} />
                               </button>
                               <button
-                                className="btn-icon-small danger"
+                                className="btn-icon btn-danger"
                                 onClick={() => handleDeleteLesson(lesson.id)}
                                 title="Delete Lesson"
                               >
-                                <Trash2 className="icon" />
+                                <Trash2 size={14} />
                               </button>
                             </div>
                           </div>
@@ -381,6 +382,7 @@ function AdminCourseEditor() {
         <ModuleModal
           courseId={courseId}
           module={selectedModule}
+          apiUrl={API_URL}
           onClose={() => {
             setShowModuleModal(false);
             setSelectedModule(null);
@@ -397,6 +399,7 @@ function AdminCourseEditor() {
         <LessonModal
           module={selectedModule}
           lesson={selectedLesson}
+          apiUrl={API_URL}
           onClose={() => {
             setShowLessonModal(false);
             setSelectedModule(null);
@@ -415,7 +418,7 @@ function AdminCourseEditor() {
 }
 
 // Module Modal Component
-function ModuleModal({ courseId, module, onClose, onSuccess }) {
+function ModuleModal({ courseId, module, apiUrl, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
     title: module?.title || '',
     description: module?.description || '',
@@ -438,9 +441,10 @@ function ModuleModal({ courseId, module, onClose, onSuccess }) {
       };
 
       const url = module
-        ? `/api/admin/courses/modules/${module.id}`
-        : `/api/admin/courses/${courseId}/modules`;
+        ? `${apiUrl}/admin/courses/modules/${module.id}`
+        : `${apiUrl}/admin/courses/${courseId}/modules`;
 
+      // ✅ FIX: Use apiUrl prop
       const response = await fetch(url, {
         method: module ? 'PUT' : 'POST',
         headers: {
@@ -479,7 +483,7 @@ function ModuleModal({ courseId, module, onClose, onSuccess }) {
               type="text"
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              placeholder="e.g., Setting up Development Environment"
+              placeholder="e.g., Week 1: Introduction and Setup"
               required
             />
           </div>
@@ -496,7 +500,7 @@ function ModuleModal({ courseId, module, onClose, onSuccess }) {
 
           <div className="form-row">
             <div className="form-group">
-              <label>Order Index *</label>
+              <label>Week Number (Order) *</label>
               <input
                 type="number"
                 value={formData.order_index}
@@ -549,7 +553,7 @@ function ModuleModal({ courseId, module, onClose, onSuccess }) {
 }
 
 // Lesson Modal Component
-function LessonModal({ module, lesson, onClose, onSuccess }) {
+function LessonModal({ module, lesson, apiUrl, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
     title: lesson?.title || '',
     description: lesson?.description || '',
@@ -577,9 +581,10 @@ function LessonModal({ module, lesson, onClose, onSuccess }) {
       };
 
       const url = lesson
-        ? `/api/admin/courses/lessons/${lesson.id}`
-        : `/api/admin/courses/modules/${module.id}/lessons`;
+        ? `${apiUrl}/admin/courses/lessons/${lesson.id}`
+        : `${apiUrl}/admin/courses/modules/${module.id}/lessons`;
 
+      // ✅ FIX: Use apiUrl prop
       const response = await fetch(url, {
         method: lesson ? 'PUT' : 'POST',
         headers: {
