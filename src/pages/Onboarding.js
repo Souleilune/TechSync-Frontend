@@ -428,13 +428,21 @@ function Onboarding() {
   console.log('📝 Challenge completed:', result);
 
   const proficiencyLevel = determineProficiencyLevel(result.score);
+  
+  // ✅ FIX: Get the language object to ensure we have the name
+  const currentLanguage = selectedLanguages[currentChallengeIndex];
+  
   const updatedResult = {
     ...result,
+    languageId: result.languageId || currentLanguage.language_id,  // Ensure languageId is set
+    languageName: result.languageName || currentLanguage.name,      // ✅ Ensure languageName is set
     proficiencyLevel,
     passed: result.score >= 60
   };
 
-  // ✅ FIX: Create updated array immediately to avoid stale state issues
+  console.log('✅ Updated result with language name:', updatedResult);
+
+  // Create updated array immediately to avoid stale state issues
   const allResults = [...challengeResults, updatedResult];
   
   setChallengeResults(allResults);
@@ -442,12 +450,12 @@ function Onboarding() {
 
   // If beginner, add to beginner list
   if (proficiencyLevel === 'beginner') {
-    console.log(`👶 ${result.languageName} identified as beginner`);
+    console.log(`👶 ${updatedResult.languageName} identified as beginner`);
     
     const beginnerResult = {
-      languageId: result.languageId,
-      languageName: result.languageName,
-      score: result.score,
+      languageId: updatedResult.languageId,
+      languageName: updatedResult.languageName,  // ✅ This will now have the correct name
+      score: updatedResult.score,
       proficiencyLevel,
       result: updatedResult
     };
@@ -465,11 +473,11 @@ function Onboarding() {
     console.log(`➡️ Moving to next challenge (${currentChallengeIndex + 1}/${selectedLanguages.length})`);
     setCurrentChallengeIndex(prev => prev + 1);
   } else {
-    // ✅ FIX: All challenges complete - use the updated allResults array
+    // All challenges complete - use the updated allResults array
     console.log('🎯 All challenges completed!');
     setAllChallengesComplete(true);
 
-    // ✅ FIX: Filter beginners from ALL results including current
+    // Filter beginners from ALL results including current
     const beginners = allResults.filter(r => 
       determineProficiencyLevel(r.score) === 'beginner'
     );
@@ -477,20 +485,21 @@ function Onboarding() {
     console.log(`👶 Found ${beginners.length} beginner(s):`, beginners.map(b => b.languageName));
 
     if (beginners.length > 0) {
-      // Show course recommendations for first beginner language
-      console.log('📚 Showing course recommendations for first beginner');
-      const allBeginnerLanguages = beginners.map(b => ({
-        language_id: b.languageId,
-        name: b.languageName,
-        score: b.score,
-        proficiencyLevel: b.proficiencyLevel
-      }));
-      const firstBeginner = beginners[0];
-      setCurrentRecommendationLanguage({
-        language_id: firstBeginner.languageId,
-        name: firstBeginner.languageName,
-        result: firstBeginner
+      // ✅ FIX: Ensure each beginner has language name from selectedLanguages
+      const allBeginnerLanguages = beginners.map(b => {
+        // Find the corresponding language from selectedLanguages
+        const langData = selectedLanguages.find(l => l.language_id === b.languageId);
+        
+        return {
+          language_id: b.languageId,
+          name: b.languageName || langData?.name || 'Unknown',  // ✅ Fallback to langData.name
+          score: b.score,
+          proficiencyLevel: b.proficiencyLevel
+        };
       });
+      
+      console.log('📚 Beginner languages array:', allBeginnerLanguages);
+      
       setCurrentRecommendationLanguage(allBeginnerLanguages);
       setShowCourseRecommendations(true);
     } else {
