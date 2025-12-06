@@ -580,7 +580,8 @@ const styles = {
     borderRadius: '12px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px'
+    gap: '8px',
+    color: 'white',
   },
   infoLabel: {
     display: 'flex',

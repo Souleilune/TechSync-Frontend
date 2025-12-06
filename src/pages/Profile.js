@@ -4,11 +4,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
 import { projectService } from '../services/projectService';
 import AwardsDisplay from '../components/AwardsDisplay';
-import EditLanguagesModal from '../components/EditLanguagesModal';
 import EditTopicsModal from '../components/EditTopicsModal';
 import PostAssessmentModal from '../components/PostAssessmentModal';
 import PostAssessmentResultModal from '../components/PostAssessmentResultModal';
-import { User, Settings, Shield, Calendar, Target, Users, Eye, EyeOff, SquarePen, Award, PanelLeft, Edit2, RefreshCw  } from 'lucide-react';
+import PreAssessmentModal from '../components/PreAssessmentModal';
+import AddLanguageModal from '../components/AddLanguageModal';
+import { User, Settings, Shield, Calendar, Target, Users, Eye, EyeOff, SquarePen, Award, PanelLeft, Edit2, RefreshCw, Plus  } from 'lucide-react';
 
 // Background symbols component with animations
 const BackgroundSymbols = () => (
@@ -132,6 +133,8 @@ function Profile() {
   const [showResultModal, setShowResultModal] = useState(false);
   const [selectedLanguageForAssessment, setSelectedLanguageForAssessment] = useState(null);
   const [assessmentResult, setAssessmentResult] = useState(null);
+  const [showAddLanguageModal, setShowAddLanguageModal] = useState(false);
+  const [showPreAssessmentModal, setShowPreAssessmentModal] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -220,6 +223,53 @@ function Profile() {
       detail: { collapsed: newCollapsedState }
     }));
   };
+
+  const handleAddLanguage = () => {
+  setShowAddLanguageModal(true);
+};
+
+// Handle language selection from AddLanguageModal
+const handleSelectLanguageForAssessment = (language) => {
+  console.log('Selected language for assessment:', language);
+  setSelectedLanguageForAssessment({
+    language_id: language.id,
+    name: language.name,
+    description: language.description
+  });
+  setShowAddLanguageModal(false);
+  // Open PreAssessmentModal after a brief delay
+  setTimeout(() => {
+    setShowPreAssessmentModal(true);
+  }, 300);
+};
+
+const handlePreAssessmentComplete = async (result) => {
+  console.log('Assessment completed:', result);
+  
+  try {
+    // Close the modal first
+    setShowPreAssessmentModal(false);
+    
+    // Show success notification
+    showNotification(`Assessment completed! Proficiency level: ${result.proficiencyLevel}`, 'success');
+    
+    // Refresh profile to show new language
+    await handleUpdateProfile();
+    
+    // Clear selected language
+    setSelectedLanguageForAssessment(null);
+    
+  } catch (error) {
+    console.error('Error after assessment:', error);
+    showNotification('Assessment completed but failed to update profile', 'error');
+  }
+};
+
+// Handle closing PreAssessmentModal
+const handleClosePreAssessment = () => {
+  setShowPreAssessmentModal(false);
+  setSelectedLanguageForAssessment(null);
+};
 
   const getProficiencyColor = (level) => {
   switch (level?.toLowerCase()) {
@@ -532,12 +582,20 @@ const handleReturnHome = async () => {
   <div style={styles.sectionHeader}>
     <h4 style={styles.userInfoTitle}>Programming Languages</h4>
     <button
-      style={styles.editButton}
-      onClick={() => setShowLanguagesModal(true)}
-      title="Edit languages"
+      style={styles.addButton}
+      onClick={handleAddLanguage}
+      title="Add language"
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = 'rgba(16, 185, 129, 0.25)';
+        e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.5)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'rgba(16, 185, 129, 0.15)';
+        e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+      }}
     >
-      <Edit2 size={16} />
-      Edit
+      <Plus size={16} />
+      Add
     </button>
   </div>
   
@@ -579,7 +637,24 @@ const handleReturnHome = async () => {
       ))}
     </div>
   ) : (
-    <p style={styles.emptySkills}>No programming languages added yet</p>
+    <div style={styles.emptyState}>
+      <p style={styles.emptySkills}>No programming languages added yet</p>
+      <button
+        style={styles.emptyAddButton}
+        onClick={handleAddLanguage}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
+          e.currentTarget.style.transform = 'translateY(-1px)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)';
+          e.currentTarget.style.transform = 'translateY(0)';
+        }}
+      >
+        <Plus size={16} />
+        Add Your First Language
+      </button>
+    </div>
   )}
 </div>
 
@@ -1009,12 +1084,6 @@ const handleReturnHome = async () => {
           }
         `}</style>
         {/* Edit Modals */}
-      <EditLanguagesModal
-        isOpen={showLanguagesModal}
-        onClose={() => setShowLanguagesModal(false)}
-        userLanguages={user?.programming_languages || []}
-        onUpdate={handleUpdateProfile}
-      />
 
       <EditTopicsModal
         isOpen={showTopicsModal}
@@ -1049,6 +1118,22 @@ const handleReturnHome = async () => {
     language={selectedLanguageForAssessment}
     currentProficiency={selectedLanguageForAssessment.currentProficiency}
     onReturnHome={handleReturnHome}
+  />
+)}
+
+<AddLanguageModal
+  isOpen={showAddLanguageModal}
+  onClose={() => setShowAddLanguageModal(false)}
+  userLanguages={user?.programming_languages || []}
+  onSelectLanguage={handleSelectLanguageForAssessment}
+/>
+
+{/* PreAssessment Modal for adding new language */}
+{showPreAssessmentModal && selectedLanguageForAssessment && (
+  <PreAssessmentModal
+    language={selectedLanguageForAssessment}
+    onComplete={handlePreAssessmentComplete}
+    onClose={handleClosePreAssessment}
   />
 )}
     </>
@@ -1118,6 +1203,41 @@ proficiencyBadge: {
   borderRadius: '4px',
   backgroundColor: 'rgba(255, 255, 255, 0.05)',
   border: '1px solid currentColor'
+},
+addButton: {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  padding: '6px 12px',
+  backgroundColor: 'rgba(16, 185, 129, 0.15)',
+  border: '1px solid rgba(16, 185, 129, 0.3)',
+  borderRadius: '6px',
+  color: '#10b981',
+  fontSize: '13px',
+  fontWeight: '600',
+  cursor: 'pointer',
+  transition: 'all 0.2s'
+},
+emptyState: {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: '16px',
+  padding: '32px 16px'
+},
+emptyAddButton: {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  padding: '10px 20px',
+  background: 'rgba(59, 130, 246, 0.15)',
+  border: '1px solid rgba(59, 130, 246, 0.3)',
+  borderRadius: '8px',
+  color: '#3b82f6',
+  fontSize: '14px',
+  fontWeight: '600',
+  cursor: 'pointer',
+  transition: 'all 0.3s ease'
 },
 retakeButton: {
   display: 'flex',
