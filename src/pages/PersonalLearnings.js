@@ -10,6 +10,7 @@ const PersonalLearnings = ({ userId }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [enrollments, setEnrollments] = useState(new Map());
+  const [allResources, setAllResources] = useState([]); // ✅ NEW: Combined resources
   const [activeFilter, setActiveFilter] = useState('all'); // 'all', 'courses', 'articles'
 
 
@@ -18,11 +19,61 @@ const PersonalLearnings = ({ userId }) => {
       fetchLearnings();
       fetchEnrollments();
       fetchBookmarkedArticles();
-
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
+  // ✅ NEW: Merge learnings and enrollments whenever either changes
+  useEffect(() => {
+    const enrolledCourses = transformEnrollmentsToResources(enrollments);
+    const combined = [...learnings, ...enrolledCourses];
+    
+    // Remove duplicates (if a course is both saved and enrolled, keep only one)
+    const uniqueResources = combined.filter((resource, index, self) => {
+      const courseId = getCourseId(resource.resource);
+      if (!courseId) return true; // Keep non-course resources
+      
+      // For courses, keep only first occurrence by courseId
+      return index === self.findIndex(r => {
+        const rCourseId = getCourseId(r.resource);
+        return rCourseId === courseId;
+      });
+    });
+    
+    setAllResources(uniqueResources);
+  }, [learnings, enrollments]);
+
+  // ✅ NEW: Transform enrollments to resource format
+  const transformEnrollmentsToResources = (enrollmentsMap) => {
+    const enrolledCourses = [];
+    enrollmentsMap.forEach((enrollmentData, courseId) => {
+      const course = enrollmentData.course;
+      if (course) {
+        enrolledCourses.push({
+          id: `enrollment-${enrollmentData.id}`,
+          savedAt: enrollmentData.enrolledAt || new Date(),
+          resource: {
+            provider: 'INTERNAL_COURSE',
+            type: 'course',
+            title: course.title,
+            description: course.short_description || course.description,
+            url: `/courses/${courseId}/learn`,
+            courseId: courseId,
+            difficulty: course.level,
+            duration: `${course.estimated_duration_hours} hours`,
+            lessonCount: course.total_lessons,
+            moduleCount: course.total_modules,
+            icon: course.icon_emoji || '📚'
+          },
+          difficulty: course.level,
+          isEnrolledCourse: true // flag to identify enrolled courses
+        });
+      }
+    });
+    return enrolledCourses;
+  };
+
+  // ✅ UPDATED: Store full course data
   const fetchEnrollments = async () => {
     try {
       const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
@@ -35,14 +86,15 @@ const PersonalLearnings = ({ userId }) => {
       const data = await response.json();
       
       if (data.success && data.enrollments) {
-        // Create a Map with course_id as key and enrollment data as value
         const enrollmentMap = new Map(
           data.enrollments.map(enrollment => [
             enrollment.course_id,
             {
               id: enrollment.id,
               progress: enrollment.progress_percentage || 0,
-              lastAccessed: enrollment.last_accessed_at
+              lastAccessed: enrollment.last_accessed_at,
+              enrolledAt: enrollment.enrolled_at,
+              course: enrollment.courses // ✅ Store full course object!
             }
           ])
         );
@@ -98,27 +150,59 @@ const PersonalLearnings = ({ userId }) => {
     }
   };
 
-  const handleRemove = async (activityId) => {
-    if (!window.confirm('Are you sure you want to remove this resource?'))
-      return;
-
-    try {
-      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-      const response = await fetch(`${API_URL}/recommendations/personal-learnings/${activityId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      const data = await response.json();
+  // ✅ UPDATED: Handle removal for both saved resources and enrolled courses
+  const handleRemove = async (activityId, isEnrolledCourse, courseId) => {
+    if (isEnrolledCourse) {
+      // For enrolled courses, we need to unenroll
+      if (!window.confirm('Are you sure you want to unenroll from this course? Your progress will be kept.'))
+        return;
       
-      if (data.success) {
-        setLearnings(learnings.filter(l => l.id !== activityId));
+      try {
+        const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+        // Note: You'll need to add an unenroll endpoint in the backend
+        // For now, we'll just remove from state (delete enrollment)
+        const response = await fetch(`${API_URL}/courses/${courseId}/enrollment`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+          // Remove from enrollments
+          const newEnrollments = new Map(enrollments);
+          newEnrollments.delete(courseId);
+          setEnrollments(newEnrollments);
+        }
+      } catch (err) {
+        console.error('Error unenrolling from course:', err);
+        alert('Failed to unenroll from course');
       }
-    } catch (err) {
-      console.error('Error removing learning:', err);
-      alert('Failed to remove resource');
+    } else {
+      // Existing removal logic for saved resources
+      if (!window.confirm('Are you sure you want to remove this resource?'))
+        return;
+
+      try {
+        const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+        const response = await fetch(`${API_URL}/recommendations/personal-learnings/${activityId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+          setLearnings(learnings.filter(l => l.id !== activityId));
+        }
+      } catch (err) {
+        console.error('Error removing learning:', err);
+        alert('Failed to remove resource');
+      }
     }
   };
 
@@ -155,7 +239,6 @@ const PersonalLearnings = ({ userId }) => {
   const getCourseId = (resource) => {
     console.log('🔍 Getting course ID from resource:', resource);
     
-    // Extract course ID from URL like "/course/abc-123/learn" or "/courses/abc-123/learn"
     if (resource?.url && isInternalCourse(resource)) {
       const match = resource.url.match(/\/courses?\/([^/]+)/);
       const courseId = match ? match[1] : null;
@@ -194,7 +277,6 @@ const PersonalLearnings = ({ userId }) => {
       const enrolled = isEnrolled(resource);
       console.log('📚 Is enrolled:', enrolled);
       
-      // If not enrolled, enroll first
       if (!enrolled) {
         try {
           const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
@@ -210,7 +292,6 @@ const PersonalLearnings = ({ userId }) => {
           
           if (data.success) {
             console.log('✅ Successfully enrolled');
-            // Update enrollments
             const enrollmentMap = new Map(enrollments);
             enrollmentMap.set(courseId, {
               id: data.enrollment?.id,
@@ -228,12 +309,10 @@ const PersonalLearnings = ({ userId }) => {
         }
       }
       
-      // Navigate to course learn page using React Router
       const targetPath = `/course/${courseId}/learn`;
       console.log('🚀 Navigating to:', targetPath);
       navigate(targetPath);
     } else if (resource?.url) {
-      // Open external resource in new tab
       console.log('🔗 Opening external URL:', resource.url);
       window.open(resource.url, '_blank', 'noopener,noreferrer');
     } else {
@@ -305,15 +384,22 @@ const PersonalLearnings = ({ userId }) => {
         <div>
           <h1 style={styles.title}>My Personal Learnings</h1>
           <p style={styles.subtitle}>
-            Resources you've saved to help improve your skills
+            Resources and courses you've saved to help improve your skills
           </p>
         </div>
         <div style={styles.statsContainer}>
           <div style={styles.statBox}>
-            <BookOpen size={24} color="#3b82f6" />
+            <GraduationCap size={24} color="#3b82f6" />
             <div>
-              <div style={styles.statNumber}>{learnings.length}</div>
-              <div style={styles.statLabel}>Saved Resources</div>
+              <div style={styles.statNumber}>{enrollments.size}</div>
+              <div style={styles.statLabel}>Enrolled Courses</div>
+            </div>
+          </div>
+          <div style={styles.statBox}>
+            <BookOpen size={24} color="#10b981" />
+            <div>
+              <div style={styles.statNumber}>{allResources.length}</div>
+              <div style={styles.statLabel}>Total Resources</div>
             </div>
           </div>
           <div style={styles.statBox}>
@@ -326,12 +412,13 @@ const PersonalLearnings = ({ userId }) => {
         </div>
       </div>
 
-      {learnings.length === 0 && bookmarkedArticles.length === 0 ? (
+      {/* ✅ UPDATED: Check allResources instead of learnings */}
+      {allResources.length === 0 && bookmarkedArticles.length === 0 ? (
         <div style={styles.emptyState}>
           <BookOpen size={64} color="#6b7280" />
           <h2 style={styles.emptyTitle}>No saved resources yet</h2>
           <p style={styles.emptyText}>
-            When you encounter challenge failures or bookmark articles, they'll appear here for easy access.
+            When you enroll in courses, bookmark articles, or save learning resources, they'll appear here for easy access.
           </p>
         </div>
       ) : (
@@ -347,101 +434,29 @@ const PersonalLearnings = ({ userId }) => {
               </div>
               <div style={styles.grid}>
                 {bookmarkedArticles.map((article) => (
-                  <div
-                    key={`article-${article.id}`}
-                    style={{
-                      ...styles.card,
-                      position: 'relative',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      minHeight: '380px',
-                    }}
-                  >
-                    <div style={{ flexGrow: 1 }}>
-                      <div
-                        style={{
-                          ...styles.providerBadge,
-                          backgroundColor: '#0a0a2315',
-                          color: '#0a0a23',
-                        }}
-                      >
-                        <ExternalLink size={16} />
-                        <span style={{ textTransform: 'uppercase' }}>DEV.TO</span>
-                      </div>
+                  <div key={article.id} style={styles.card}>
+                    <div style={styles.providerBadge}>
+                      <BookMarked size={14} />
+                      <span>DEV.TO</span>
+                    </div>
 
-                      {article.cover_image && (
-                        <img 
-                          src={article.cover_image} 
-                          alt={article.title}
-                          style={{
-                            width: '100%',
-                            height: '150px',
-                            objectFit: 'cover',
-                            borderRadius: '8px',
-                            marginBottom: '1rem'
-                          }}
-                        />
+                    <h3 style={styles.resourceTitle}>{article.title}</h3>
+
+                    {article.description && (
+                      <p style={styles.resourceDescription}>
+                        {article.description.substring(0, 150)}...
+                      </p>
+                    )}
+
+                    <div style={styles.resourceMeta}>
+                      {article.user?.name && (
+                        <span style={styles.metaItem}>By {article.user.name}</span>
                       )}
-
-                      <h3 style={styles.resourceTitle}>
-                        {article.title}
-                      </h3>
-
-                      {article.description && (
-                        <p style={styles.resourceDescription}>
-                          {article.description.length > 150
-                            ? article.description.substring(0, 150) + '...'
-                            : article.description}
-                        </p>
-                      )}
-
-                      <div style={styles.resourceMeta}>
-                        {article.user?.name && (
-                          <span style={styles.metaItem}>By {article.user.name}</span>
-                        )}
-                        {article.reading_time_minutes && (
-                          <span style={styles.metaItem}>
-                            <Clock size={14} />
-                            {article.reading_time_minutes} min
-                          </span>
-                        )}
-                        {article.positive_reactions_count && (
-                          <span style={styles.metaItem}>
-                            <Star size={14} />
-                            {article.positive_reactions_count}
-                          </span>
-                        )}
-                      </div>
-
-                      {article.tag_list && article.tag_list.length > 0 && (
-                        <div style={{ 
-                          display: 'flex', 
-                          flexWrap: 'wrap', 
-                          gap: '0.5rem',
-                          marginTop: '0.5rem'
-                        }}>
-                          {article.tag_list.slice(0, 3).map((tag, idx) => (
-                            <span 
-                              key={idx}
-                              style={{
-                                fontSize: '0.75rem',
-                                padding: '0.25rem 0.5rem',
-                                backgroundColor: '#3b82f615',
-                                color: '#60a5fa',
-                                borderRadius: '4px'
-                              }}
-                            >
-                              #{tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      {article.bookmarked_at && (
-                        <p style={styles.savedInfo}>
-                          Bookmarked on {new Date(article.bookmarked_at).toLocaleDateString()}
-                        </p>
+                      {article.reading_time_minutes && (
+                        <span style={styles.metaItem}>
+                          <Clock size={14} />
+                          {article.reading_time_minutes} min
+                        </span>
                       )}
                     </div>
 
@@ -455,6 +470,7 @@ const PersonalLearnings = ({ userId }) => {
                         <ExternalLink size={16} />
                         Read Article
                       </a>
+
                       <button
                         onClick={() => handleRemoveBookmark(article.id)}
                         style={styles.removeButton}
@@ -468,25 +484,28 @@ const PersonalLearnings = ({ userId }) => {
             </>
           )}
 
-          {/* Saved Learning Resources Section */}
-          {learnings.length > 0 && (
+          {/* ✅ UPDATED: My Courses & Saved Resources Section */}
+          {allResources.length > 0 && (
             <>
               {bookmarkedArticles.length > 0 && (
                 <div style={styles.sectionHeader}>
                   <h2 style={styles.sectionTitle}>
                     <BookOpen size={20} style={{ marginRight: '0.5rem' }} />
-                    Saved Learning Resources
+                    My Courses & Saved Resources
                   </h2>
                 </div>
               )}
               <div style={styles.grid}>
-                {learnings.map((learning) => {
+                {/* ✅ UPDATED: Use allResources instead of learnings */}
+                {allResources.map((learning) => {
             const resource = learning.resource || {};
             const provider = resource.provider || 'unknown';
             const isCourse = isInternalCourse(resource);
             const enrolled = isEnrolled(resource);
             const enrollmentData = getEnrollmentData(resource);
             const progress = enrollmentData?.progress || 0;
+            const isEnrolledCourse = learning.isEnrolledCourse || false; // ✅ Check if it's an enrolled course
+            
             return (
             <div
               key={learning.id}
@@ -497,10 +516,9 @@ const PersonalLearnings = ({ userId }) => {
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
-                minHeight: '380px', // keeps cards uniform
+                minHeight: '380px',
               }}
             >
-              {/* ---- CARD CONTENT ---- */}
               <div style={{ flexGrow: 1 }}>
                 <div
                   style={{
@@ -589,76 +607,43 @@ const PersonalLearnings = ({ userId }) => {
                 )}
               </div>
 
-              {/* ---- FOOTER (DATE + BUTTONS) ---- */}
-              <div
-                style={{
-                  marginTop: 'auto',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                  paddingTop: '12px',
-                }}
-              >
-                {/* Saved date in consistent format */}
-                <div
-                  style={{
-                    fontSize: '12px',
-                    color: '#9ca3af',
-                    textAlign: 'left',
-                  }}
-                >
-                  Saved{' '}
-                  {new Date(learning.savedAt).toLocaleDateString('en-US', {
-                    month: 'numeric',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}
-                </div>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '8px',
-                  }}
-                >
-                  {isCourse ? (
-                    <button
-                      onClick={() => handleCourseClick(resource)}
-                      style={{
-                        ...styles.viewButton,
-                        ...(enrolled ? styles.enrolledButton : {}),
-                        flex: 1,
-                      }}
-                    >
-                      {enrolled ? (
-                        <GraduationCap size={16} />
-                      ) : (
-                        <ExternalLink size={16} />
-                      )}
-                      {getButtonText(resource)}
-                    </button>
-                  ) : (
-                    <a
-                      href={resource.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ ...styles.viewButton, flex: 1 }}
-                    >
-                      <ExternalLink size={16} />
-                      View Resource
-                    </a>
-                  )}
-
+              <div style={styles.cardActions}>
+                {isCourse ? (
                   <button
-                    onClick={() => handleRemove(learning.id)}
-                    style={styles.removeButton}
-                    title="Remove from saved resources"
+                    onClick={() => handleCourseClick(resource)}
+                    style={{
+                      ...styles.viewButton,
+                      ...(enrolled ? styles.enrolledButton : {}),
+                      flex: 1,
+                    }}
                   >
-                    <Trash2 size={16} />
+                    {enrolled ? (
+                      <GraduationCap size={16} />
+                    ) : (
+                      <ExternalLink size={16} />
+                    )}
+                    {getButtonText(resource)}
                   </button>
-                </div>
+                ) : (
+                  <a
+                    href={resource.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ ...styles.viewButton, flex: 1 }}
+                  >
+                    <ExternalLink size={16} />
+                    View Resource
+                  </a>
+                )}
+
+                {/* ✅ UPDATED: Pass isEnrolledCourse flag to handleRemove */}
+                <button
+                  onClick={() => handleRemove(learning.id, isEnrolledCourse, getCourseId(resource))}
+                  style={styles.removeButton}
+                  title={isEnrolledCourse ? "Unenroll from course" : "Remove from saved resources"}
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
             </div>
           );
@@ -803,22 +788,6 @@ const styles = {
   courseCard: {
     backgroundColor: '#1a1d24'
   },
-  cardContent: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column'
-  },
-  cardFooter: {
-    marginTop: 'auto',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1rem',
-    position: 'relative',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'space-between',
-    minHeight: '360px',
-  },
   providerBadge: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -881,11 +850,6 @@ const styles = {
     fontSize: '0.875rem',
     color: '#6b7280'
   },
-  savedInfo: {
-    fontSize: '0.75rem',
-    color: '#6b7280',
-    marginBottom: '1rem'
-  },
   progressContainer: {
     marginBottom: '1rem',
     padding: '1rem',
@@ -944,12 +908,8 @@ const styles = {
     cursor: 'pointer',
     transition: 'all 0.2s'
   },
-  continueButton: {
+  enrolledButton: {
     backgroundColor: '#10b981'
-  },
-  startButton: {
-    backgroundColor: '#3b82f6',
-    width: '100%'
   },
   removeButton: {
     padding: '0.75rem',
