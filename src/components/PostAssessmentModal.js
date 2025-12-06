@@ -1,11 +1,11 @@
 // frontend/src/components/PostAssessmentModal.js
+// VERSION WITHOUT MONACO EDITOR - Uses simple textarea instead
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   X, Clock, FileText, Code, Send, Loader, AlertTriangle, 
   Play, TestTube2, CheckCircle, XCircle 
 } from 'lucide-react';
 import ChallengeAPI from '../services/challengeAPI';
-import Editor from '@monaco-editor/react';
 
 const PostAssessmentModal = ({ 
   isOpen, 
@@ -23,6 +23,7 @@ const PostAssessmentModal = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmitRef = useRef(null);
+  const textareaRef = useRef(null);
 
   // Load challenge on mount
   useEffect(() => {
@@ -79,6 +80,12 @@ const PostAssessmentModal = ({
     if (challenge?.time_limit_minutes) {
       setTimeRemaining(challenge.time_limit_minutes * 60);
     }
+    // Focus on textarea after starting
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }, 100);
   };
 
   const handleSubmitChallenge = useCallback(async () => {
@@ -135,6 +142,23 @@ const PostAssessmentModal = ({
       case 'hard': return '#ef4444';
       case 'expert': return '#8b5cf6';
       default: return '#6b7280';
+    }
+  };
+
+  // Handle tab key in textarea
+  const handleKeyDown = (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const start = e.target.selectionStart;
+      const end = e.target.selectionEnd;
+      const value = e.target.value;
+      
+      // Insert 2 spaces for tab
+      e.target.value = value.substring(0, start) + '  ' + value.substring(end);
+      e.target.selectionStart = e.target.selectionEnd = start + 2;
+      
+      // Update state
+      setSubmittedCode(e.target.value);
     }
   };
 
@@ -301,7 +325,7 @@ const PostAssessmentModal = ({
                 </div>
               )}
 
-              {/* Code Editor */}
+              {/* Code Editor (Textarea) */}
               {startedAt && (
                 <div style={styles.section}>
                   <div style={styles.sectionHeader}>
@@ -311,20 +335,14 @@ const PostAssessmentModal = ({
                     <h3 style={styles.sectionTitle}>Your Solution</h3>
                   </div>
                   <div style={styles.editorContainer}>
-                    <Editor
-                      height="400px"
-                      defaultLanguage={language?.name?.toLowerCase() || 'javascript'}
+                    <textarea
+                      ref={textareaRef}
                       value={submittedCode}
-                      onChange={(value) => setSubmittedCode(value || '')}
-                      theme="vs-dark"
-                      options={{
-                        minimap: { enabled: false },
-                        fontSize: 14,
-                        lineNumbers: 'on',
-                        scrollBeyondLastLine: false,
-                        automaticLayout: true,
-                        tabSize: 2
-                      }}
+                      onChange={(e) => setSubmittedCode(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      style={styles.textarea}
+                      placeholder="Write your code here..."
+                      spellCheck="false"
                     />
                   </div>
                 </div>
@@ -640,6 +658,19 @@ const styles = {
     borderRadius: '12px',
     overflow: 'hidden',
     border: '1px solid rgba(255, 255, 255, 0.1)'
+  },
+  textarea: {
+    width: '100%',
+    height: '400px',
+    padding: '1rem',
+    background: '#0f0f0f',
+    border: 'none',
+    color: '#e2e8f0',
+    fontFamily: 'Monaco, Consolas, "Courier New", monospace',
+    fontSize: '14px',
+    lineHeight: '1.6',
+    resize: 'vertical',
+    outline: 'none'
   },
   errorBanner: {
     display: 'flex',
