@@ -220,6 +220,16 @@ function Profile() {
       detail: { collapsed: newCollapsedState }
     }));
   };
+
+  const getProficiencyColor = (level) => {
+  switch (level?.toLowerCase()) {
+    case 'beginner': return '#60a5fa';
+    case 'intermediate': return '#34d399';
+    case 'advanced': return '#f59e0b';
+    case 'expert': return '#8b5cf6';
+    default: return '#9ca3af';
+  }
+};
   
 const fetchUserProfile = async () => {
   try {
@@ -521,50 +531,53 @@ const handleReturnHome = async () => {
             <div style={styles.userInfoSection}>
   <div style={styles.sectionHeader}>
     <h4 style={styles.userInfoTitle}>Programming Languages</h4>
+    <button
+      style={styles.editButton}
+      onClick={() => setShowLanguagesModal(true)}
+      title="Edit languages"
+    >
+      <Edit2 size={16} />
+      Edit
+    </button>
   </div>
   
   {user?.programming_languages && user.programming_languages.length > 0 ? (
-    <>
-      {/* Language tags display */}
-      <div style={styles.skillsContainer}>
-        {user.programming_languages.map(lang => (
-          <span key={lang.id} style={styles.languageTag}>
-            {lang.programming_languages?.name || lang.name}
-            <span style={styles.skillLevel}>({lang.proficiency_level})</span>
-          </span>
-        ))}
-      </div>
-      
-      {/* Retake Assessment Button - Footer of the container */}
-      <div style={styles.retakeAssessmentContainer}>
-        <button
-          style={styles.retakeAssessmentButton}
-          onClick={() => {
-            // If user has multiple languages, you might want to show a selection modal
-            // For now, we'll trigger for the first language or show the languages modal
-            if (user.programming_languages.length === 1) {
-              handleRetakeAssessment(user.programming_languages[0]);
-            } else {
-              // Show language selection (you can create a selection modal or use existing modal)
-              setShowLanguagesModal(true);
-            }
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
-            e.currentTarget.style.transform = 'translateY(-1px)';
-            e.currentTarget.style.boxShadow = '0 6px 25px rgba(16, 185, 129, 0.35)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'rgba(16, 185, 129, 0.15)';
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = 'none';
-          }}
-        >
-          <RefreshCw size={16} />
-          Retake Assessment
-        </button>
-      </div>
-    </>
+    <div style={styles.languagesGrid}>
+      {user.programming_languages.map(lang => (
+        <div key={lang.id} style={styles.languageCard}>
+          <div style={styles.languageCardTop}>
+            <span style={styles.languageName}>
+              {lang.programming_languages?.name || lang.name}
+            </span>
+            <span 
+              style={{
+                ...styles.proficiencyBadge,
+                color: getProficiencyColor(lang.proficiency_level)
+              }}
+            >
+              {lang.proficiency_level}
+            </span>
+          </div>
+          <button
+            style={styles.retakeButton}
+            onClick={() => handleRetakeAssessment(lang)}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.boxShadow = '0 4px 15px rgba(16, 185, 129, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(16, 185, 129, 0.15)';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            <RefreshCw size={14} />
+            Retake
+          </button>
+        </div>
+      ))}
+    </div>
   ) : (
     <p style={styles.emptySkills}>No programming languages added yet</p>
   )}
@@ -1070,6 +1083,58 @@ const styles = {
     paddingLeft: '270px',
     marginLeft: '-150px'
   },
+  languagesGrid: {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+  gap: '12px'
+},
+languageCard: {
+  background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(37, 99, 235, 0.05) 100%)',
+  border: '1px solid rgba(59, 130, 246, 0.2)',
+  borderRadius: '10px',
+  padding: '12px',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '8px'
+},
+languageCardTop: {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: '8px'
+},
+languageName: {
+  color: '#e2e8f0',
+  fontSize: '14px',
+  fontWeight: '600',
+  flex: 1
+},
+proficiencyBadge: {
+  fontSize: '11px',
+  fontWeight: '600',
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  padding: '3px 8px',
+  borderRadius: '4px',
+  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  border: '1px solid currentColor'
+},
+retakeButton: {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '6px',
+  padding: '8px 12px',
+  background: 'rgba(16, 185, 129, 0.15)',
+  border: '1px solid rgba(16, 185, 129, 0.3)',
+  borderRadius: '6px',
+  color: '#10b981',
+  fontSize: '13px',
+  fontWeight: '600',
+  cursor: 'pointer',
+  transition: 'all 0.3s ease',
+  width: '100%'
+},
   notification: {
     position: 'fixed',
     top: '20px',
