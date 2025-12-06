@@ -9,6 +9,7 @@ import PostAssessmentModal from '../components/PostAssessmentModal';
 import PostAssessmentResultModal from '../components/PostAssessmentResultModal';
 import PreAssessmentModal from '../components/PreAssessmentModal';
 import AddLanguageModal from '../components/AddLanguageModal';
+import ProfileUpdateAPI from '../services/profileUpdateAPI';
 import { User, Settings, Shield, Calendar, Target, Users, Eye, EyeOff, SquarePen, Award, PanelLeft, Edit2, RefreshCw, Plus  } from 'lucide-react';
 
 // Background symbols component with animations
@@ -121,7 +122,6 @@ function Profile() {
   const [awardStats, setAwardStats] = useState(null);
   const [loadingAwards, setLoadingAwards] = useState(false);
 
-  const [showLanguagesModal, setShowLanguagesModal] = useState(false);
   const [showTopicsModal, setShowTopicsModal] = useState(false);
 
   // Sidebar state - initialize from localStorage with lazy initialization
@@ -135,6 +135,7 @@ function Profile() {
   const [assessmentResult, setAssessmentResult] = useState(null);
   const [showAddLanguageModal, setShowAddLanguageModal] = useState(false);
   const [showPreAssessmentModal, setShowPreAssessmentModal] = useState(false);
+  
 
   useEffect(() => {
     if (user) {
@@ -247,21 +248,66 @@ const handlePreAssessmentComplete = async (result) => {
   console.log('Assessment completed:', result);
   
   try {
+    // Check if assessment was passed
+    if (!result.passed) {
+      showNotification('Assessment not passed. Please try again.', 'error');
+      setShowPreAssessmentModal(false);
+      setSelectedLanguageForAssessment(null);
+      return;
+    }
+
     // Close the modal first
     setShowPreAssessmentModal(false);
-    
-    // Show success notification
-    showNotification(`Assessment completed! Proficiency level: ${result.proficiencyLevel}`, 'success');
-    
-    // Refresh profile to show new language
-    await handleUpdateProfile();
+
+    // ✅ CRITICAL: Verify we have the necessary data from PreAssessmentModal
+    if (!result.attemptId || !result.challengeId) {
+      console.error('Missing attemptId or challengeId in result:', result);
+      showNotification('Error: Missing challenge completion data', 'error');
+      setSelectedLanguageForAssessment(null);
+      return;
+    }
+
+    // ✅ CRITICAL: Call the backend API to actually add the language
+    console.log('Calling verifyAndAddLanguage with:', {
+      language_id: selectedLanguageForAssessment.language_id,
+      proficiency_level: result.proficiencyLevel,
+      challenge_id: result.challengeId,
+      attempt_id: result.attemptId
+    });
+
+    const verifyResponse = await ProfileUpdateAPI.verifyAndAddLanguage(
+      selectedLanguageForAssessment.language_id,
+      result.proficiencyLevel,
+      result.challengeId,
+      result.attemptId,
+      0 // years_experience (optional, default to 0)
+    );
+
+    console.log('verifyAndAddLanguage response:', verifyResponse);
+
+    if (verifyResponse.success) {
+      // Show success notification with language name
+      showNotification(
+        `${selectedLanguageForAssessment.name} added with ${result.proficiencyLevel} proficiency!`, 
+        'success'
+      );
+      
+      // Refresh profile to show new language
+      await handleUpdateProfile();
+    } else {
+      showNotification(verifyResponse.message || 'Failed to add language', 'error');
+    }
     
     // Clear selected language
     setSelectedLanguageForAssessment(null);
     
   } catch (error) {
     console.error('Error after assessment:', error);
-    showNotification('Assessment completed but failed to update profile', 'error');
+    showNotification(
+      error.response?.data?.message || 'Failed to add language to profile', 
+      'error'
+    );
+    setSelectedLanguageForAssessment(null);
   }
 };
 
