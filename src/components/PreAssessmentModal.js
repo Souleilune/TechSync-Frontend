@@ -384,21 +384,27 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
 
   // Continue to next language or complete
   const handleContinueAfterResult = () => {
-    if (!result) return;
+  if (!result) return;
 
-    const proficiencyLevel = 
-      result.score >= 90 ? 'expert' :
-      result.score >= 75 ? 'advanced' :
-      result.score >= 60 ? 'intermediate' : 'beginner';
+  const proficiencyLevel = 
+    result.score >= 90 ? 'expert' :
+    result.score >= 75 ? 'advanced' :
+    result.score >= 60 ? 'intermediate' : 'beginner';
 
-    onComplete({
-      languageId: language.language_id,
-      passed: result.passed || result.score >= 50,
-      score: result.score,
-      proficiencyLevel,
-      feedback: result.evaluation?.feedback || result.feedback || 'Assessment complete'
-    });
-  };
+  console.log('🎯 Preparing to complete assessment with result:', result);
+  console.log('🔑 Challenge ID:', challenge.id);
+
+  onComplete({
+    languageId: language.language_id,
+    passed: result.passed || result.score >= 50,
+    score: result.score,
+    proficiencyLevel,
+    feedback: result.evaluation?.feedback || result.feedback || 'Assessment complete',
+    // ✅ CRITICAL: These IDs are needed by Profile.js
+    attemptId: result.id || result.attempt_id,
+    challengeId: challenge.id
+  });
+};
 
   if (loading) {
     return (
