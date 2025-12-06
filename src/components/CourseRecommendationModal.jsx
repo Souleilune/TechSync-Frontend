@@ -1,5 +1,5 @@
 // frontend/src/components/CourseRecommendationModal.jsx
-// FIXED - Correctly handles API response from /recommendations/challenge-failure
+// ENHANCED VERSION with detailed logging to debug R courses issue
 import React, { useState, useEffect } from 'react';
 import { BookOpen, Clock, Award, ChevronRight, Sparkles, CheckCircle, Trophy, Code2 } from 'lucide-react';
 
@@ -46,7 +46,7 @@ const CourseRecommendationModal = ({
       // Load courses for ALL beginner languages in parallel
       const coursesPromises = languages.map(async (lang) => {
         try {
-          console.log(`  🔍 Fetching courses for ${lang.name} (ID: ${lang.language_id})...`);
+          console.log(`\n🔍 Fetching courses for ${lang.name} (ID: ${lang.language_id})...`);
           
           const response = await fetch(`${API_URL}/recommendations/challenge-failure`, {
             method: 'POST',
@@ -76,22 +76,58 @@ const CourseRecommendationModal = ({
 
           const data = await response.json();
           
-          console.log(`  📊 API Response for ${lang.name}:`, {
+          console.log(`  📊 Full API Response for ${lang.name}:`, data);
+          console.log(`  📊 Response structure:`, {
             success: data.success,
             recommendationsCount: data.recommendations?.length || 0,
+            metadataExists: !!data.metadata,
             metadata: data.metadata
           });
           
-          // ✅ FIX: The endpoint returns 'recommendations' not 'resources'
+          if (data.recommendations && data.recommendations.length > 0) {
+            console.log(`  📋 All recommendations for ${lang.name}:`);
+            data.recommendations.forEach((rec, idx) => {
+              console.log(`    ${idx + 1}. ${rec.title}`);
+              console.log(`       - provider: "${rec.provider}"`);
+              console.log(`       - type: "${rec.type}"`);
+              console.log(`       - courseId: "${rec.courseId}"`);
+              console.log(`       - hasUrl: ${!!rec.url}`);
+            });
+          }
+          
+          // ✅ Filter for internal courses with detailed logging
           if (data.success && data.recommendations) {
-            // Filter for internal courses only
-            const internalCourses = data.recommendations.filter(
-              resource => resource.provider === 'internal_course' || 
-                         resource.type === 'course' ||
-                         resource.courseId // Has courseId means it's an internal course
-            );
+            const internalCourses = data.recommendations.filter(resource => {
+              // Multiple checks with case-insensitive comparison
+              const hasInternalProvider = resource.provider?.toLowerCase() === 'internal_course';
+              const hasCourseType = resource.type?.toLowerCase() === 'course';
+              const hasCourseId = !!resource.courseId;
+              const hasCoursePath = resource.url?.includes('/courses/');
+              
+              const isInternal = hasInternalProvider || hasCourseType || hasCourseId || hasCoursePath;
+              
+              if (isInternal) {
+                console.log(`    ✅ INCLUDED: "${resource.title}"`, {
+                  provider: resource.provider,
+                  type: resource.type,
+                  courseId: resource.courseId,
+                  checks: { hasInternalProvider, hasCourseType, hasCourseId, hasCoursePath }
+                });
+              } else {
+                console.log(`    ❌ EXCLUDED: "${resource.title}"`, {
+                  provider: resource.provider,
+                  type: resource.type,
+                  courseId: resource.courseId,
+                  reason: 'None of the internal course checks passed'
+                });
+              }
+              
+              return isInternal;
+            });
             
-            console.log(`  ✅ Found ${internalCourses.length} courses for ${lang.name}`);
+            console.log(`  ✅ Found ${internalCourses.length} INTERNAL courses for ${lang.name}:`, 
+              internalCourses.map(c => c.title)
+            );
             
             return {
               language: lang,
@@ -124,10 +160,13 @@ const CourseRecommendationModal = ({
         };
       });
 
-      console.log('📊 Final courses map:', Object.entries(coursesMap).map(([id, data]) => ({
-        language: data.language.name,
-        courseCount: data.courses.length
-      })));
+      console.log('\n📊 Final courses map:');
+      Object.entries(coursesMap).forEach(([id, data]) => {
+        console.log(`  ${data.language.name} (ID: ${id}):`, {
+          courseCount: data.courses.length,
+          courseTitles: data.courses.map(c => c.title)
+        });
+      });
 
       setCoursesByLanguage(coursesMap);
       
@@ -462,7 +501,7 @@ const CourseRecommendationModal = ({
   );
 };
 
-// Styles object (kept exactly the same as before)
+// Styles object (same as before - keeping existing styles)
 const styles = {
   overlay: {
     position: 'fixed',
@@ -684,12 +723,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '14px',
-    cursor: 'default',
-    ':hover': {
-      borderColor: 'rgba(59, 130, 246, 0.5)',
-      transform: 'translateY(-2px)',
-      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)'
-    }
+    cursor: 'default'
   },
   courseHeader: {
     display: 'flex',
