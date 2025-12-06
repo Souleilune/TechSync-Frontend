@@ -189,7 +189,6 @@ const CourseRecommendationModal = ({
   const getProficiencyData = (score) => {
     if (score >= 90) return { 
       rank: 'S', 
-      icon: '👑', 
       color: '#a855f7', 
       glow: 'rgba(168, 85, 247, 0.4)',
       title: 'Expert',
@@ -197,7 +196,6 @@ const CourseRecommendationModal = ({
     };
     if (score >= 75) return { 
       rank: 'A', 
-      icon: '🚀', 
       color: '#3b82f6', 
       glow: 'rgba(59, 130, 246, 0.4)',
       title: 'Advanced',
@@ -205,15 +203,13 @@ const CourseRecommendationModal = ({
     };
     if (score >= 60) return { 
       rank: 'B', 
-      icon: '⭐', 
       color: '#10b981', 
       glow: 'rgba(16, 185, 129, 0.4)',
       title: 'Intermediate',
       description: 'Good foundation!'
     };
     return { 
-      rank: 'C', 
-      icon: '🌱', 
+      rank: 'C',
       color: '#f59e0b', 
       glow: 'rgba(245, 158, 11, 0.4)',
       title: 'Beginner',
@@ -940,7 +936,6 @@ const CourseRecommendationModal = ({
               {/* Encouragement Card */}
               {languages.some(l => (l.score || 0) < 60) && (
                 <div style={styles.encouragementCard}>
-                  <div style={styles.encouragementIcon}>🌱</div>
                   <p style={styles.encouragementText}>
                     <strong>Everyone starts somewhere!</strong><br />
                     These courses will help you build a strong foundation.
