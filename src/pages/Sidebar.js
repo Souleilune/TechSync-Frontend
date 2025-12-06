@@ -1,4 +1,4 @@
-// frontend/src/pages/Sidebar.js - PORTAL APPROACH FOR MENU
+// frontend/src/pages/Sidebar.js - UPDATED WITH COURSE MANAGEMENT
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,7 +13,8 @@ import {
   HelpCircle, 
   User, 
   LogOut,
-  ChevronRight 
+  ChevronRight,
+  GraduationCap  // ← NEW ICON for Course Management
 } from 'lucide-react';
 import FriendsChat from '../components/FriendsChat';
 
@@ -59,10 +60,12 @@ function Sidebar() {
     { id: 'learns', label: 'Learns', path: '/learns', icon: BookOpen }
   ];
 
+  // ← UPDATED: Added Course Management for admins
   const adminNavItems = user?.role === 'admin' || user?.role === 'moderator' ? [
     { id: 'challenges', label: 'Challenges', path: '/challenges', icon: Puzzle },
     ...(user?.role === 'admin' ? [
-      { id: 'manage-users', label: 'Manage Users', path: '/admin/users', icon: UserCog }
+      { id: 'manage-users', label: 'Manage Users', path: '/admin/users', icon: UserCog },
+      { id: 'manage-courses', label: 'Manage Courses', path: '/admin/courses', icon: GraduationCap }
     ] : []),
     { id: 'admin', label: 'Admin Panel', path: '/admin', icon: Shield }
   ] : [];
@@ -78,6 +81,7 @@ function Sidebar() {
     navigate(path);
   };
 
+  // ← UPDATED: Added course routes to active path detection
   const isActive = (path) => {
     if (path === '/') {
       return location.pathname === '/' || location.pathname === '/dashboard';
@@ -91,8 +95,17 @@ function Sidebar() {
       return location.pathname === '/admin/users' || location.pathname.startsWith('/admin/users/');
     }
     
+    // ← NEW: Handle course management routes
+    if (path === '/admin/courses') {
+      return location.pathname === '/admin/courses' || location.pathname.startsWith('/admin/courses/');
+    }
+    
     if (path === '/admin') {
-      return location.pathname === '/admin' || (location.pathname.startsWith('/admin') && !location.pathname.startsWith('/admin/users'));
+      return location.pathname === '/admin' || (
+        location.pathname.startsWith('/admin') && 
+        !location.pathname.startsWith('/admin/users') &&
+        !location.pathname.startsWith('/admin/courses')
+      );
     }
     
     return location.pathname.startsWith(path);

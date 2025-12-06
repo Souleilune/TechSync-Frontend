@@ -45,7 +45,8 @@ import ProjectTasks from './pages/project/ProjectTasks';
 import ProjectChats from './pages/project/ProjectChats';
 import ProjectFiles from './pages/project/ProjectFiles';
 import ProjectMembers from './pages/project/ProjectMembers';
-
+import AdminCourseManagement from './pages/AdminCourseManagement';
+import AdminCourseEditor from './pages/AdminCourseEditor';
 // friends
 
 import Friends from './pages/Friends';
@@ -1012,6 +1013,27 @@ function App() {
                     <ProtectedRoute>
                       <Layout>
                         <ManageUsers />
+                      </Layout>
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/admin/courses" 
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <AdminCourseManagement />
+                      </Layout>
+                    </ProtectedRoute>
+                  } 
+                />
+
+                <Route 
+                  path="/admin/courses/:courseId/edit" 
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <AdminCourseEditor />
                       </Layout>
                     </ProtectedRoute>
                   } 
