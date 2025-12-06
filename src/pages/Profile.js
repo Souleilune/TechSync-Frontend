@@ -248,15 +248,7 @@ const handlePreAssessmentComplete = async (result) => {
   console.log('Assessment completed:', result);
   
   try {
-    // Check if assessment was passed
-    if (!result.passed) {
-      showNotification('Assessment not passed. Please try again.', 'error');
-      setShowPreAssessmentModal(false);
-      setSelectedLanguageForAssessment(null);
-      return;
-    }
 
-    // Close the modal first
     setShowPreAssessmentModal(false);
 
     // ✅ CRITICAL: Verify we have the necessary data from PreAssessmentModal
