@@ -1,6 +1,7 @@
 // frontend/src/components/AddLanguageModal.js
 import React, { useState, useEffect } from 'react';
 import { X, Code, ChevronRight, Search, Loader } from 'lucide-react';
+import { suggestionsService } from '../services/suggestionsService';
 
 const AddLanguageModal = ({ isOpen, onClose, userLanguages, onSelectLanguage }) => {
   const [allLanguages, setAllLanguages] = useState([]);
@@ -19,22 +20,15 @@ const AddLanguageModal = ({ isOpen, onClose, userLanguages, onSelectLanguage }) 
       setLoading(true);
       setError('');
       
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/programming-languages`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      // Use the existing suggestionsService
+      const languages = await suggestionsService.getProgrammingLanguages();
       
-      const data = await response.json();
+      console.log('Fetched languages:', languages);
+      setAllLanguages(languages || []);
       
-      if (data.success) {
-        setAllLanguages(data.data || []);
-      } else {
-        setError('Failed to load languages');
-      }
     } catch (err) {
       console.error('Error fetching languages:', err);
-      setError('Failed to load languages');
+      setError('Failed to load languages. Please try again.');
     } finally {
       setLoading(false);
     }
