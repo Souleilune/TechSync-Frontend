@@ -1,6 +1,6 @@
 // src/components/CourseDetailsModal.jsx
-// Gamified Dark Theme Version
-import React, { useState } from 'react';
+// Gamified Dark Theme Version - FETCHES REAL COURSE DATA
+import React, { useState, useEffect } from 'react';
 import { 
   X, BookOpen, Clock, Award, Layers, Target, CheckCircle, 
   PlayCircle, ChevronRight, ChevronDown, Code, Video, FileText,
@@ -9,6 +9,69 @@ import {
 
 const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling }) => {
   const [expandedModules, setExpandedModules] = useState({});
+  const [courseDetails, setCourseDetails] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch real course data on mount
+  useEffect(() => {
+    fetchCourseDetails();
+  }, [course]);
+
+  const fetchCourseDetails = async () => {
+    try {
+      setLoading(true);
+      const courseId = extractCourseId(course);
+      
+      if (!courseId) {
+        console.warn('⚠️ No course ID found, using provided course data');
+        setCourseDetails({ ...course, modules: generateMockModules(course) });
+        setLoading(false);
+        return;
+      }
+
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      console.log(`🔍 Fetching course details for ID: ${courseId}`);
+      
+      const response = await fetch(`${API_URL}/courses/${courseId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Course details fetched successfully:', data);
+        
+        // Handle different response structures
+        const fetchedCourse = data.course || data;
+        setCourseDetails({
+          ...course, // Keep original course data as fallback
+          ...fetchedCourse, // Override with fetched data
+          modules: fetchedCourse.modules || fetchedCourse.course_modules || []
+        });
+      } else {
+        console.warn(`⚠️ Failed to fetch course (${response.status}), using provided data`);
+        setCourseDetails({ ...course, modules: generateMockModules(course) });
+      }
+    } catch (err) {
+      console.error('❌ Error fetching course details:', err);
+      setCourseDetails({ ...course, modules: generateMockModules(course) });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const extractCourseId = (course) => {
+    // Try multiple ways to extract course ID
+    if (course.courseId) return course.courseId;
+    if (course.id) return course.id;
+    if (course.course_id) return course.course_id;
+    if (course.url) {
+      const match = course.url.match(/\/courses?\/([^/]+)/);
+      return match ? match[1] : null;
+    }
+    return null;
+  };
 
   const toggleModule = (moduleIndex) => {
     setExpandedModules(prev => ({
@@ -54,8 +117,40 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
     }
   };
 
-  const modules = course.modules || course.course_modules || generateMockModules(course);
-  const difficultyData = getDifficultyData(course.difficulty);
+  // Show loading state
+  if (loading) {
+    return (
+      <>
+        <style>{keyframes}</style>
+        <div style={styles.overlay} onClick={onClose}>
+          <div style={{...styles.modal, padding: '60px'}} onClick={(e) => e.stopPropagation()}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={styles.spinner} />
+              <p style={{ color: '#64748b', marginTop: '20px' }}>Loading course details...</p>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (!courseDetails) {
+    return null;
+  }
+
+  // Use fetched course details
+  const modules = courseDetails.modules || courseDetails.course_modules || generateMockModules(courseDetails);
+  const difficultyData = getDifficultyData(courseDetails.level || courseDetails.difficulty);
+
+  // Calculate totals from actual data
+  const totalLessons = modules.reduce((sum, module) => {
+    const lessons = module.lessons || module.course_lessons || [];
+    return sum + lessons.length;
+  }, 0) || courseDetails.total_lessons || 24;
+
+  const totalDuration = courseDetails.estimated_duration_hours 
+    ? `${courseDetails.estimated_duration_hours} Hours`
+    : (courseDetails.duration || '8 Hours');
 
   const keyframes = `
     @keyframes fadeIn {
@@ -648,7 +743,7 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
                     />
                   </svg>
                   <div style={{ position: 'relative', zIndex: 2, fontSize: '2.5rem' }}>
-                    {course.icon || '📚'}
+                    {courseDetails.icon_emoji || courseDetails.icon || '📚'}
                   </div>
                 </div>
               </div>
@@ -658,10 +753,10 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
                 COURSE DETAILS
               </div>
               
-              <h2 style={styles.title}>{course.title}</h2>
+              <h2 style={styles.title}>{courseDetails.title}</h2>
               
               <p style={styles.description}>
-                {course.description || 'Comprehensive course to help you master the fundamentals and advance your skills.'}
+                {courseDetails.description || courseDetails.short_description || 'Comprehensive course to help you master the fundamentals and advance your skills.'}
               </p>
 
               {/* Stats */}
@@ -674,7 +769,7 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
                   }}>
                     <Layers size={18} color="#60a5fa" />
                   </div>
-                  <span style={styles.statValue}>{course.moduleCount || modules.length || 8} Modules</span>
+                  <span style={styles.statValue}>{courseDetails.total_modules || modules.length} Modules</span>
                 </div>
                 <div style={styles.statItem}>
                   <div style={{
@@ -684,7 +779,7 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
                   }}>
                     <BookOpen size={18} color="#34d399" />
                   </div>
-                  <span style={styles.statValue}>{course.lessonCount || 24} Lessons</span>
+                  <span style={styles.statValue}>{totalLessons} Lessons</span>
                 </div>
                 <div style={styles.statItem}>
                   <div style={{
@@ -694,7 +789,7 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
                   }}>
                     <Clock size={18} color="#fbbf24" />
                   </div>
-                  <span style={styles.statValue}>{course.duration || '8 Hours'}</span>
+                  <span style={styles.statValue}>{totalDuration}</span>
                 </div>
                 <div style={styles.statItem}>
                   <div style={{
@@ -728,7 +823,7 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
               </div>
               
               <div style={styles.learningGrid}>
-                {getWhatYouLearn(course, modules).map((item, idx) => (
+                {getWhatYouLearn(courseDetails, modules).map((item, idx) => (
                   <div key={idx} style={styles.learningItem} className="learning-item">
                     <div style={styles.learningIconContainer}>
                       <CheckCircle size={16} color="#10b981" />
@@ -754,7 +849,7 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
                 <div style={styles.sectionTitleContainer}>
                   <h3 style={styles.sectionTitle}>Course Curriculum</h3>
                   <p style={styles.sectionSubtitle}>
-                    {modules.length} modules • {course.lessonCount || modules.reduce((sum, m) => sum + (m.lessons?.length || 3), 0)} lessons
+                    {modules.length} modules • {totalLessons} lessons
                   </p>
                 </div>
               </div>
@@ -858,7 +953,7 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
                 </div>
                 <div style={styles.footerSubtitle}>
                   <Users size={14} />
-                  Join {course.enrollmentCount || 'thousands of'} students already enrolled
+                  Join {courseDetails.enrollmentCount || courseDetails.enrollment_count || 'thousands of'} students already enrolled
                 </div>
               </div>
               <button
@@ -899,19 +994,20 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
 
 // Helper functions
 const generateMockModules = (course) => {
-  const moduleCount = course.moduleCount || 8;
+  const moduleCount = course.moduleCount || course.total_modules || 8;
   return Array.from({ length: moduleCount }, (_, i) => ({
     title: `Week ${i + 1}: ${getModuleTitle(i, course)}`,
     description: `Learn essential concepts and techniques in week ${i + 1}`,
-    estimated_duration_minutes: 60
+    estimated_duration_minutes: 60,
+    lessons: generateMockLessons(i)
   }));
 };
 
 const generateMockLessons = (moduleIndex) => {
   return [
-    { title: 'Introduction and Overview', type: 'video', estimated_duration_minutes: 15 },
-    { title: 'Core Concepts', type: 'text', estimated_duration_minutes: 20 },
-    { title: 'Hands-on Practice', type: 'coding', estimated_duration_minutes: 25 }
+    { title: 'Introduction and Overview', lesson_type: 'video', estimated_duration_minutes: 15 },
+    { title: 'Core Concepts', lesson_type: 'text', estimated_duration_minutes: 20 },
+    { title: 'Hands-on Practice', lesson_type: 'coding', estimated_duration_minutes: 25 }
   ];
 };
 
@@ -934,8 +1030,10 @@ const getWhatYouLearn = (course, modules) => {
     return course.learningObjectives;
   }
 
+  // Use first 4 module titles as learning objectives
   const objectives = modules.slice(0, 4).map(module => module.title);
   
+  // Fill with defaults if not enough modules
   while (objectives.length < 4) {
     const defaults = [
       'Master the fundamentals and core concepts',
