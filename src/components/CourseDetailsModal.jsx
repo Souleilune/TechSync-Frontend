@@ -62,7 +62,6 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
   };
 
   const extractCourseId = (course) => {
-    // Try multiple ways to extract course ID
     if (course.courseId) return course.courseId;
     if (course.id) return course.id;
     if (course.course_id) return course.course_id;
@@ -117,41 +116,7 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
     }
   };
 
-  // Show loading state
-  if (loading) {
-    return (
-      <>
-        <style>{keyframes}</style>
-        <div style={styles.overlay} onClick={onClose}>
-          <div style={{...styles.modal, padding: '60px'}} onClick={(e) => e.stopPropagation()}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={styles.spinner} />
-              <p style={{ color: '#64748b', marginTop: '20px' }}>Loading course details...</p>
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  if (!courseDetails) {
-    return null;
-  }
-
-  // Use fetched course details
-  const modules = courseDetails.modules || courseDetails.course_modules || generateMockModules(courseDetails);
-  const difficultyData = getDifficultyData(courseDetails.level || courseDetails.difficulty);
-
-  // Calculate totals from actual data
-  const totalLessons = modules.reduce((sum, module) => {
-    const lessons = module.lessons || module.course_lessons || [];
-    return sum + lessons.length;
-  }, 0) || courseDetails.total_lessons || 24;
-
-  const totalDuration = courseDetails.estimated_duration_hours 
-    ? `${courseDetails.estimated_duration_hours} Hours`
-    : (courseDetails.duration || '8 Hours');
-
+  // CRITICAL: Define keyframes and styles BEFORE any conditional returns
   const keyframes = `
     @keyframes fadeIn {
       from { opacity: 0; }
@@ -684,6 +649,41 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
       animation: 'spin 0.8s linear infinite'
     }
   };
+
+  // NOW check loading state - after keyframes and styles are defined
+  if (loading) {
+    return (
+      <>
+        <style>{keyframes}</style>
+        <div style={styles.overlay} onClick={onClose}>
+          <div style={{...styles.modal, padding: '60px', justifyContent: 'center', alignItems: 'center'}} onClick={(e) => e.stopPropagation()}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={styles.spinner} />
+              <p style={{ color: '#64748b', marginTop: '20px', fontSize: '14px' }}>Loading course details...</p>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (!courseDetails) {
+    return null;
+  }
+
+  // Use fetched course details
+  const modules = courseDetails.modules || courseDetails.course_modules || generateMockModules(courseDetails);
+  const difficultyData = getDifficultyData(courseDetails.level || courseDetails.difficulty);
+
+  // Calculate totals from actual data
+  const totalLessons = modules.reduce((sum, module) => {
+    const lessons = module.lessons || module.course_lessons || [];
+    return sum + lessons.length;
+  }, 0) || courseDetails.total_lessons || 24;
+
+  const totalDuration = courseDetails.estimated_duration_hours 
+    ? `${courseDetails.estimated_duration_hours} Hours`
+    : (courseDetails.duration || '8 Hours');
 
   return (
     <>
