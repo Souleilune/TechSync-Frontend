@@ -6,7 +6,9 @@ import { projectService } from '../services/projectService';
 import AwardsDisplay from '../components/AwardsDisplay';
 import EditLanguagesModal from '../components/EditLanguagesModal';
 import EditTopicsModal from '../components/EditTopicsModal';
-import { User, Settings, Shield, Calendar, Target, Users, Eye, EyeOff, SquarePen, Award, PanelLeft, Edit2 } from 'lucide-react';
+import PostAssessmentModal from '../components/PostAssessmentModal';
+import PostAssessmentResultModal from '../components/PostAssessmentResultModal';
+import { User, Settings, Shield, Calendar, Target, Users, Eye, EyeOff, SquarePen, Award, PanelLeft, Edit2, RefreshCw  } from 'lucide-react';
 
 // Background symbols component with animations
 const BackgroundSymbols = () => (
@@ -126,6 +128,10 @@ function Profile() {
     const saved = localStorage.getItem('sidebarCollapsed');
     return saved === 'true';
   });
+  const [showPostAssessmentModal, setShowPostAssessmentModal] = useState(false);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [selectedLanguageForAssessment, setSelectedLanguageForAssessment] = useState(null);
+  const [assessmentResult, setAssessmentResult] = useState(null);
 
   useEffect(() => {
     if (user) {
@@ -214,6 +220,39 @@ function Profile() {
       detail: { collapsed: newCollapsedState }
     }));
   };
+
+  // Handle retake assessment button click
+const handleRetakeAssessment = (userLanguage) => {
+  setSelectedLanguageForAssessment({
+    id: userLanguage.language_id || userLanguage.programming_languages?.id,
+    name: userLanguage.programming_languages?.name || userLanguage.name,
+    currentProficiency: userLanguage.proficiency_level,
+    userLanguageData: userLanguage
+  });
+  setShowPostAssessmentModal(true);
+};
+
+// Handle assessment completion from PostAssessmentModal
+const handleAssessmentComplete = (result) => {
+  console.log('Assessment completed:', result);
+  setAssessmentResult(result);
+  setShowPostAssessmentModal(false);
+  
+  // Show result modal after a brief delay
+  setTimeout(() => {
+    setShowResultModal(true);
+  }, 300);
+};
+
+// Handle returning home from result modal
+const handleReturnHome = async () => {
+  setShowResultModal(false);
+  setSelectedLanguageForAssessment(null);
+  setAssessmentResult(null);
+  
+  // Refresh profile data to show updated proficiency
+  await fetchUserProfile();
+};
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -469,30 +508,56 @@ function Profile() {
             </div>
 
             <div style={styles.userInfoSection}>
-              <div style={styles.sectionHeader}>
-                <h4 style={styles.userInfoTitle}>Programming Languages</h4>
-                <button
-                  style={styles.editButton}
-                  onClick={() => setShowLanguagesModal(true)}
-                  title="Edit programming languages"
-                >
-                  <Edit2 size={16} />
-                  Edit
-                </button>
-              </div>
-              {user?.programming_languages && user.programming_languages.length > 0 ? (
-                <div style={styles.skillsContainer}>
-                  {user.programming_languages.map(lang => (
-                    <span key={lang.id} style={styles.languageTag}>
-                      {lang.programming_languages?.name || lang.name}
-                      <span style={styles.skillLevel}>({lang.proficiency_level})</span>
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p style={styles.emptySkills}>No programming languages added yet</p>
-              )}
-            </div>
+  <div style={styles.sectionHeader}>
+    <h4 style={styles.userInfoTitle}>Programming Languages</h4>
+  </div>
+  
+  {user?.programming_languages && user.programming_languages.length > 0 ? (
+    <>
+      {/* Language tags display */}
+      <div style={styles.skillsContainer}>
+        {user.programming_languages.map(lang => (
+          <span key={lang.id} style={styles.languageTag}>
+            {lang.programming_languages?.name || lang.name}
+            <span style={styles.skillLevel}>({lang.proficiency_level})</span>
+          </span>
+        ))}
+      </div>
+      
+      {/* Retake Assessment Button - Footer of the container */}
+      <div style={styles.retakeAssessmentContainer}>
+        <button
+          style={styles.retakeAssessmentButton}
+          onClick={() => {
+            // If user has multiple languages, you might want to show a selection modal
+            // For now, we'll trigger for the first language or show the languages modal
+            if (user.programming_languages.length === 1) {
+              handleRetakeAssessment(user.programming_languages[0]);
+            } else {
+              // Show language selection (you can create a selection modal or use existing modal)
+              setShowLanguagesModal(true);
+            }
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+            e.currentTarget.style.transform = 'translateY(-1px)';
+            e.currentTarget.style.boxShadow = '0 6px 25px rgba(16, 185, 129, 0.35)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(16, 185, 129, 0.15)';
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
+          <RefreshCw size={16} />
+          Retake Assessment
+        </button>
+      </div>
+    </>
+  ) : (
+    <p style={styles.emptySkills}>No programming languages added yet</p>
+  )}
+</div>
 
             <div style={styles.userInfoSection}>
               <div style={styles.sectionHeader}>
@@ -934,6 +999,34 @@ function Profile() {
         onUpdate={handleUpdateProfile}
       />
      </div>
+     {showPostAssessmentModal && selectedLanguageForAssessment && (
+  <PostAssessmentModal
+    isOpen={showPostAssessmentModal}
+    onClose={() => {
+      setShowPostAssessmentModal(false);
+      setSelectedLanguageForAssessment(null);
+    }}
+    language={selectedLanguageForAssessment}
+    currentProficiency={selectedLanguageForAssessment.currentProficiency}
+    onAssessmentComplete={handleAssessmentComplete}
+  />
+)}
+
+{/* Assessment Result Modal */}
+{showResultModal && assessmentResult && selectedLanguageForAssessment && (
+  <PostAssessmentResultModal
+    isOpen={showResultModal}
+    onClose={() => {
+      setShowResultModal(false);
+      setSelectedLanguageForAssessment(null);
+      setAssessmentResult(null);
+    }}
+    assessmentResult={assessmentResult}
+    language={selectedLanguageForAssessment}
+    currentProficiency={selectedLanguageForAssessment.currentProficiency}
+    onReturnHome={handleReturnHome}
+  />
+)}
     </>
   );
 }
@@ -1037,6 +1130,29 @@ const styles = {
     color: 'white',
     margin: '0 0 8px 0'
   },
+  retakeAssessmentContainer: {
+  marginTop: '16px',
+  paddingTop: '16px',
+  borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+  display: 'flex',
+  justifyContent: 'center'
+},
+retakeAssessmentButton: {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  padding: '10px 24px',
+  background: 'rgba(16, 185, 129, 0.15)',
+  border: '1px solid rgba(16, 185, 129, 0.3)',
+  borderRadius: '8px',
+  color: '#10b981',
+  fontSize: '14px',
+  fontWeight: '600',
+  cursor: 'pointer',
+  transition: 'all 0.3s ease',
+  width: '100%',
+  justifyContent: 'center'
+},
   userMeta: {
     color: '#9ca3af',
     fontSize: '14px',
