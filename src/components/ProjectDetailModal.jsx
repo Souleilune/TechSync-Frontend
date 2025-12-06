@@ -1,17 +1,27 @@
+// frontend/src/components/ProjectDetailModal.js - ENHANCED WITH RETAKE ASSESSMENT
 import React, { useState, useEffect } from 'react';
-import { X, Users, Clock, TrendingUp, Code, Target, Calendar, Lock, Sparkles, User } from 'lucide-react';
+import { X, Users, Clock, TrendingUp, Code, Target, Calendar, Lock, Sparkles, User, RefreshCw, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import ExpandableMatchSummary from './ExpandableMatchSummary';
+import PostAssessmentModal from './PostAssessmentModal';
+import PostAssessmentResultModal from './PostAssessmentResultModal';
 
-const ProjectDetailModal = ({ project, isOpen, onClose, onJoin, isLocked }) => {
+const ProjectDetailModal = ({ project, isOpen, onClose, onJoin, isLocked, userProfile }) => {
   const [isJoining, setIsJoining] = useState(false);
   const [ownerInfo, setOwnerInfo] = useState(null);
   const [loadingOwner, setLoadingOwner] = useState(false);
+  const navigate = useNavigate();
+
+  // Assessment states
+  const [showPostAssessmentModal, setShowPostAssessmentModal] = useState(false);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [selectedLanguageForAssessment, setSelectedLanguageForAssessment] = useState(null);
+  const [assessmentResult, setAssessmentResult] = useState(null);
 
   // Fetch owner information when modal opens
   useEffect(() => {
     const fetchOwnerInfo = async () => {
-      // Check multiple possible locations for owner_id
       const ownerId = project?.owner_id || 
                       project?.project?.owner_id || 
                       project?.ownerId;
@@ -21,19 +31,16 @@ const ProjectDetailModal = ({ project, isOpen, onClose, onJoin, isLocked }) => {
         return;
       }
       
-      // If we already have owner data, use it
       if (project.owner?.username || project.owner?.email) {
         setOwnerInfo(project.owner);
         return;
       }
 
-      // Also check if project has users property (from SQL join)
       if (project.users?.username || project.users?.email) {
         setOwnerInfo(project.users);
         return;
       }
 
-      // Otherwise fetch from API using the correct endpoint
       if (ownerId) {
         setLoadingOwner(true);
         try {
@@ -46,7 +53,6 @@ const ProjectDetailModal = ({ project, isOpen, onClose, onJoin, isLocked }) => {
           }
         } catch (error) {
           console.error('Error fetching owner info:', error);
-          // Store the owner_id as fallback
           setOwnerInfo({ id: ownerId });
         } finally {
           setLoadingOwner(false);
@@ -59,20 +65,58 @@ const ProjectDetailModal = ({ project, isOpen, onClose, onJoin, isLocked }) => {
     }
   }, [isOpen, project]);
 
-  // Debug: Log project data to see available fields
-  console.log('ProjectDetailModal - Project data:', project);
-  console.log('ProjectDetailModal - All project keys:', project ? Object.keys(project) : []);
-  console.log('ProjectDetailModal - Owner data:', project?.owner);
-  console.log('ProjectDetailModal - Users data:', project?.users);
-  console.log('ProjectDetailModal - Owner ID:', project?.owner_id);
-  console.log('ProjectDetailModal - Nested project:', project?.project);
-  console.log('ProjectDetailModal - Nested owner_id:', project?.project?.owner_id);
-  console.log('ProjectDetailModal - Project ID:', project?.projectId || project?.id);
-  console.log('ProjectDetailModal - Fetched owner info:', ownerInfo);
+  // Handle retake assessment for a specific language
+  const handleRetakeAssessment = (languageName) => {
+    console.log('🔄 Retaking assessment for:', languageName);
+    
+    // Find the user's language data
+    const userLanguage = userProfile?.programming_languages?.find(
+      lang => (lang.programming_languages?.name || lang.name) === languageName
+    );
 
-  if (!isOpen || !project) return null;
+    if (!userLanguage) {
+      console.error('Language not found in user profile:', languageName);
+      return;
+    }
 
-  // FIXED: Accept event parameter and pass it to onJoin
+    setSelectedLanguageForAssessment({
+      id: userLanguage.language_id || userLanguage.programming_languages?.id,
+      name: userLanguage.programming_languages?.name || userLanguage.name,
+      currentProficiency: userLanguage.proficiency_level,
+      userLanguageData: userLanguage
+    });
+    
+    setShowPostAssessmentModal(true);
+  };
+
+  // Handle assessment completion
+  const handleAssessmentComplete = (result) => {
+    console.log('Assessment completed:', result);
+    setAssessmentResult(result);
+    setShowPostAssessmentModal(false);
+    
+    setTimeout(() => {
+      setShowResultModal(true);
+    }, 300);
+  };
+
+  // Handle returning from result modal
+  const handleReturnFromAssessment = () => {
+    setShowResultModal(false);
+    setSelectedLanguageForAssessment(null);
+    setAssessmentResult(null);
+    
+    // Optionally refresh the project modal or close it
+    // You might want to refresh match score here
+    console.log('Assessment flow completed');
+  };
+
+  // Handle "Go to Profile" link
+  const handleGoToProfile = () => {
+    onClose(); // Close modal
+    navigate('/profile'); // Navigate to profile
+  };
+
   const handleJoinClick = async (e) => {
     e.stopPropagation();
     
@@ -112,298 +156,367 @@ const ProjectDetailModal = ({ project, isOpen, onClose, onJoin, isLocked }) => {
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
+  // Enhanced suggestion parsing to extract language names
+  const parseSuggestions = (suggestions) => {
+    if (!suggestions || !Array.isArray(suggestions)) return [];
+    
+    return suggestions.map(suggestion => {
+      // Check if suggestion mentions improving a language
+      const improveMatch = suggestion.match(/Improve your (.+?) proficiency/i);
+      const addMatch = suggestion.match(/Add (.+?) to your profile/i);
+      
+      return {
+        text: suggestion,
+        languageName: improveMatch?.[1] || addMatch?.[1] || null,
+        isRetakeable: !!improveMatch // Only "improve" suggestions are retakeable
+      };
+    });
+  };
+
+  if (!isOpen || !project) return null;
+
   const mf = project.matchFactors || {};
   const score = project.score || 0;
+  const parsedSuggestions = parseSuggestions(mf.suggestions);
 
   return (
-    <div style={styles.overlay} onClick={handleOverlayClick}>
-      <div style={styles.modal}>
-        {/* Header */}
-        <div style={styles.header}>
-          <div style={styles.headerTop}>
-            <div style={styles.titleSection}>
-              <h2 style={styles.title}>{project.title}</h2>
-              <div style={styles.badges}>
-                <span style={{
-                  ...styles.badge,
-                  backgroundColor: `${getDifficultyColor(project.difficulty_level)}20`,
-                  color: getDifficultyColor(project.difficulty_level),
-                  border: `1px solid ${getDifficultyColor(project.difficulty_level)}40`
-                }}>
-                  {project.difficulty_level?.toUpperCase()}
-                </span>
-                <span style={styles.badge}>
-                  {project.status?.toUpperCase()}
-                </span>
-              </div>
-            </div>
-            <button style={styles.closeButton} onClick={onClose}>
-              <X size={24} />
-            </button>
-          </div>
-          
-          <ExpandableMatchSummary
-            score={score}
-            matchFactors={mf}
-            project={project}
-            userProfile={null} // Optional: pass user profile if available
-          />
-        </div>
-
-        {/* Content */}
-        <div style={styles.content}>
-          {/* Description Section */}
-          <div style={styles.section}>
-            <h3 style={styles.sectionTitle}>
-              <Target size={18} />
-              Project Description
-            </h3>
-            <p style={styles.description}>{project.description}</p>
-          </div>
-
-          {/* Full Description if available */}
-          {project.full_description && project.full_description !== project.description && (
-            <div style={styles.section}>
-              <h3 style={styles.sectionTitle}>
-                <Target size={18} />
-                Detailed Overview
-              </h3>
-              <div style={styles.fullDescription}>
-                {(project.full_description || '').split('\n').map((paragraph, idx) => (
-                  <p key={idx} style={styles.paragraph}>{paragraph}</p>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Project Stats Grid */}
-          <div style={styles.statsGrid}>
-            {/* Owner card - shows if we have owner data or owner_id */}
-            {(ownerInfo || project.owner_id || project.project?.owner_id) && (
-              <div style={styles.statCard}>
-                <div style={styles.statIcon}>
-                  <User size={20} style={{ color: '#8b5cf6' }} />
-                </div>
-                <div style={styles.statContent}>
-                  <div style={styles.statLabel}>Project Owner</div>
-                  <div style={styles.statValue}>
-                    {loadingOwner ? (
-                      <span style={{ color: '#9ca3af', fontSize: '13px' }}>Loading...</span>
-                    ) : ownerInfo?.username ? (
-                      ownerInfo.username
-                    ) : ownerInfo?.full_name ? (
-                      ownerInfo.full_name
-                    ) : ownerInfo?.email ? (
-                      ownerInfo.email.split('@')[0]
-                    ) : project.owner?.username ? (
-                      project.owner.username
-                    ) : project.owner?.full_name ? (
-                      project.owner.full_name
-                    ) : project.owner?.email ? (
-                      project.owner.email.split('@')[0]
-                    ) : project.users?.username ? (
-                      project.users.username
-                    ) : project.users?.full_name ? (
-                      project.users.full_name
-                    ) : project.users?.email ? (
-                      project.users.email.split('@')[0]
-                    ) : ownerInfo?.id ? (
-                      `User ${ownerInfo.id.slice(0, 8)}...`
-                    ) : (
-                      'Owner Info Unavailable'
-                    )}
-                  </div>
+    <>
+      <div style={styles.overlay} onClick={handleOverlayClick}>
+        <div style={styles.modal}>
+          {/* Header */}
+          <div style={styles.header}>
+            <div style={styles.headerTop}>
+              <div style={styles.titleSection}>
+                <h2 style={styles.title}>{project.title}</h2>
+                <div style={styles.badges}>
+                  <span style={{
+                    ...styles.badge,
+                    backgroundColor: `${getDifficultyColor(project.difficulty_level)}20`,
+                    color: getDifficultyColor(project.difficulty_level),
+                    border: `1px solid ${getDifficultyColor(project.difficulty_level)}40`
+                  }}>
+                    {project.difficulty_level?.toUpperCase()}
+                  </span>
+                  <span style={styles.badge}>
+                    {project.status?.toUpperCase()}
+                  </span>
                 </div>
               </div>
-            )}
-
+              <button style={styles.closeButton} onClick={onClose}>
+                <X size={24} />
+              </button>
+            </div>
             
-
-            <div style={styles.statCard}>
-              <div style={styles.statIcon}>
-                <Users size={20} style={{ color: '#10b981' }} />
-              </div>
-              <div style={styles.statContent}>
-                <div style={styles.statLabel}>Team Size</div>
-                <div style={styles.statValue}>
-                  {project.current_members || 0}/{project.maximum_members}
-                </div>
-              </div>
-            </div>
-
-            <div style={styles.statCard}>
-              <div style={styles.statIcon}>
-                <TrendingUp size={20} style={{ color: '#f59e0b' }} />
-              </div>
-              <div style={styles.statContent}>
-                <div style={styles.statLabel}>Difficulty</div>
-                <div style={styles.statValue}>
-                  {project.difficulty_level}
-                </div>
-              </div>
-            </div>
-
-            {project.deadline && (
-              <div style={styles.statCard}>
-                <div style={styles.statIcon}>
-                  <Calendar size={20} style={{ color: '#ef4444' }} />
-                </div>
-                <div style={styles.statContent}>
-                  <div style={styles.statLabel}>Deadline</div>
-                  <div style={styles.statValue}>
-                    {formatDate(project.deadline)}
-                  </div>
-                </div>
-              </div>
-            )}
+            <ExpandableMatchSummary
+              score={score}
+              matchFactors={mf}
+              project={project}
+              userProfile={userProfile}
+            />
           </div>
 
-          {/* Technologies Section */}
-          {project.project_languages && project.project_languages.length > 0 && (
-            <div style={styles.section}>
-              <h3 style={styles.sectionTitle}>
-                <Code size={18} />
-                Technologies & Languages
-              </h3>
-              <div style={styles.techGrid}>
-                {(project.project_languages || []).map((lang, index) => (
-                  <div key={index} style={styles.techTag}>
-                    {lang.programming_languages?.name || lang.name || 'Unknown'}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Topics Section */}
-          {project.project_topics && project.project_topics.length > 0 && (
+          {/* Content */}
+          <div style={styles.content}>
+            {/* Description Section */}
             <div style={styles.section}>
               <h3 style={styles.sectionTitle}>
                 <Target size={18} />
-                Project Topics
+                Project Description
               </h3>
-              <div style={styles.techGrid}>
-                {(project.project_topics || []).map((topic, index) => (
-                  <div key={index} style={styles.topicTag}>
-                    {topic.topics?.name || topic.name || 'Unknown'}
-                  </div>
-                ))}
-              </div>
+              <p style={styles.description}>{project.description}</p>
             </div>
-          )}
 
-          {/* Match Insights Section */}
-          {mf && Object.keys(mf).length > 0 && (
-            <div style={styles.section}>
-              <h3 style={styles.sectionTitle}>
-                <Sparkles size={18} />
-                Why This Matches You
-              </h3>
-              
-              <div style={styles.insightsGrid}>
-                {mf.languageFit && (
-                  <div style={styles.insightCard}>
-                    <div style={styles.insightHeader}>
-                      <Code size={16} />
-                      <span>Language Match</span>
-                    </div>
-                    <div style={styles.insightValue}>
-                      {mf.languageFit.coverage}% Compatible
-                    </div>
-                    <div style={styles.insightDetail}>
-                      {(mf.languageFit.matches || []).map(
-                        m => m.programming_languages?.name || m.name || 'Unknown'
-                      ).join(', ')}
+            {/* Full Description if available */}
+            {project.full_description && project.full_description !== project.description && (
+              <div style={styles.section}>
+                <h3 style={styles.sectionTitle}>
+                  <Target size={18} />
+                  Detailed Overview
+                </h3>
+                <div style={styles.fullDescription}>
+                  {(project.full_description || '').split('\n').map((paragraph, idx) => (
+                    <p key={idx} style={styles.paragraph}>{paragraph}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Project Stats Grid */}
+            <div style={styles.statsGrid}>
+              {(ownerInfo || project.owner_id || project.project?.owner_id) && (
+                <div style={styles.statCard}>
+                  <div style={styles.statIcon}>
+                    <User size={20} style={{ color: '#8b5cf6' }} />
+                  </div>
+                  <div style={styles.statContent}>
+                    <div style={styles.statLabel}>Project Owner</div>
+                    <div style={styles.statValue}>
+                      {loadingOwner ? (
+                        <span style={{ color: '#9ca3af', fontSize: '13px' }}>Loading...</span>
+                      ) : ownerInfo?.username || ownerInfo?.full_name || ownerInfo?.email?.split('@')[0] || 
+                        project.owner?.username || project.owner?.full_name || project.users?.username || 
+                        'Owner Info Unavailable'}
                     </div>
                   </div>
-                )}
+                </div>
+              )}
 
-                {mf.topicCoverage && mf.topicCoverage.matches?.length > 0 && (
-                  <div style={styles.insightCard}>
-                    <div style={styles.insightHeader}>
-                      <Target size={16} />
-                      <span>Topic Alignment</span>
-                    </div>
-                    <div style={styles.insightValue}>
-                      {mf.topicCoverage.matches.length} Matches
-                    </div>
-                    <div style={styles.insightDetail}>
-                      {(mf.topicCoverage.matches || []).map(
-                        topic => topic?.name || topic?.topics?.name || 'Unknown'
-                      ).join(', ')}
-                    </div>
+              <div style={styles.statCard}>
+                <div style={styles.statIcon}>
+                  <Users size={20} style={{ color: '#10b981' }} />
+                </div>
+                <div style={styles.statContent}>
+                  <div style={styles.statLabel}>Team Size</div>
+                  <div style={styles.statValue}>
+                    {project.current_members || 0}/{project.maximum_members}
                   </div>
-                )}
-
-                {mf.difficultyAlignment && (
-                  <div style={styles.insightCard}>
-                    <div style={styles.insightHeader}>
-                      <TrendingUp size={16} />
-                      <span>Skill Level</span>
-                    </div>
-                    <div style={styles.insightValue}>
-                      Good fit for your experience
-                    </div>
-                    <div style={styles.insightDetail}>
-                      Your programming experience: {mf.difficultyAlignment.userExperience || 'Not set'} years
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
 
-              {/* Suggestions */}
-              {mf.suggestions?.length > 0 && (
-                <div style={styles.suggestionsBox}>
-                  <div style={styles.suggestionsTitle}>
-                    💡 To boost your match score:
+              <div style={styles.statCard}>
+                <div style={styles.statIcon}>
+                  <TrendingUp size={20} style={{ color: '#f59e0b' }} />
+                </div>
+                <div style={styles.statContent}>
+                  <div style={styles.statLabel}>Difficulty</div>
+                  <div style={styles.statValue}>
+                    {project.difficulty_level}
                   </div>
-                  <ul style={styles.suggestionsList}>
-                    {(mf.suggestions || []).map((suggestion, idx) => (
-                      <li key={idx} style={styles.suggestionItem}>
-                        {suggestion}
-                      </li>
-                    ))}
-                  </ul>
+                </div>
+              </div>
+
+              {project.deadline && (
+                <div style={styles.statCard}>
+                  <div style={styles.statIcon}>
+                    <Calendar size={20} style={{ color: '#ef4444' }} />
+                  </div>
+                  <div style={styles.statContent}>
+                    <div style={styles.statLabel}>Deadline</div>
+                    <div style={styles.statValue}>
+                      {formatDate(project.deadline)}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
-          )}
-        </div>
 
-        {/* Footer */}
-        <div style={styles.footer}>
-          <button style={styles.cancelButton} onClick={onClose}>
-            Close
-          </button>
-          <button
-            style={{
-              ...styles.joinButton,
-              ...(isLocked ? styles.joinButtonLocked : {}),
-              ...(isJoining ? styles.joinButtonDisabled : {})
-            }}
-            onClick={handleJoinClick}
-            disabled={isLocked || isJoining}
-          >
-            {isLocked ? (
-              <>
-                <Lock size={18} />
-                Locked - Improve Match Score
-              </>
-            ) : isJoining ? (
-              <>
-                <div className="spinner" style={styles.spinner} />
-                Joining...
-              </>
-            ) : (
-              <>
-                <Users size={18} />
-                Join Project
-              </>
+            {/* Technologies Section */}
+            {project.project_languages && project.project_languages.length > 0 && (
+              <div style={styles.section}>
+                <h3 style={styles.sectionTitle}>
+                  <Code size={18} />
+                  Technologies & Languages
+                </h3>
+                <div style={styles.techGrid}>
+                  {(project.project_languages || []).map((lang, index) => (
+                    <div key={index} style={styles.techTag}>
+                      {lang.programming_languages?.name || lang.name || 'Unknown'}
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
-          </button>
+
+            {/* Topics Section */}
+            {project.project_topics && project.project_topics.length > 0 && (
+              <div style={styles.section}>
+                <h3 style={styles.sectionTitle}>
+                  <Target size={18} />
+                  Project Topics
+                </h3>
+                <div style={styles.techGrid}>
+                  {(project.project_topics || []).map((topic, index) => (
+                    <div key={index} style={styles.topicTag}>
+                      {topic.topics?.name || topic.name || 'Unknown'}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Match Insights Section */}
+            {mf && Object.keys(mf).length > 0 && (
+              <div style={styles.section}>
+                <h3 style={styles.sectionTitle}>
+                  <Sparkles size={18} />
+                  Why This Matches You
+                </h3>
+                
+                <div style={styles.insightsGrid}>
+                  {mf.languageFit && (
+                    <div style={styles.insightCard}>
+                      <div style={styles.insightHeader}>
+                        <Code size={16} />
+                        <span>Language Match</span>
+                      </div>
+                      <div style={styles.insightValue}>
+                        {mf.languageFit.coverage}% Compatible
+                      </div>
+                      <div style={styles.insightDetail}>
+                        {(mf.languageFit.matches || []).map(
+                          m => m.programming_languages?.name || m.name || 'Unknown'
+                        ).join(', ')}
+                      </div>
+                    </div>
+                  )}
+
+                  {mf.topicCoverage && mf.topicCoverage.matches?.length > 0 && (
+                    <div style={styles.insightCard}>
+                      <div style={styles.insightHeader}>
+                        <Target size={16} />
+                        <span>Topic Alignment</span>
+                      </div>
+                      <div style={styles.insightValue}>
+                        {mf.topicCoverage.matches.length} Matches
+                      </div>
+                      <div style={styles.insightDetail}>
+                        {(mf.topicCoverage.matches || []).map(
+                          topic => topic?.name || topic?.topics?.name || 'Unknown'
+                        ).join(', ')}
+                      </div>
+                    </div>
+                  )}
+
+                  {mf.difficultyAlignment && (
+                    <div style={styles.insightCard}>
+                      <div style={styles.insightHeader}>
+                        <TrendingUp size={16} />
+                        <span>Skill Level</span>
+                      </div>
+                      <div style={styles.insightValue}>
+                        Good fit for your experience
+                      </div>
+                      <div style={styles.insightDetail}>
+                        Your programming experience: {mf.difficultyAlignment.userExperience || 'Not set'} years
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Enhanced Suggestions with Retake Buttons */}
+                {parsedSuggestions.length > 0 && (
+                  <div style={styles.suggestionsBox}>
+                    <div style={styles.suggestionsHeader}>
+                      <Sparkles size={16} />
+                      <span style={styles.suggestionsTitle}>To boost your match score:</span>
+                    </div>
+                    <div style={styles.suggestionsList}>
+                      {parsedSuggestions.map((suggestion, idx) => (
+                        <div key={idx} style={styles.suggestionItem}>
+                          <div style={styles.suggestionText}>
+                            {suggestion.text}
+                          </div>
+                          {suggestion.isRetakeable && suggestion.languageName && (
+                            <button
+                              style={styles.retakeButton}
+                              onClick={() => handleRetakeAssessment(suggestion.languageName)}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+                                e.currentTarget.style.transform = 'translateY(-1px)';
+                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'rgba(16, 185, 129, 0.15)';
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.boxShadow = 'none';
+                              }}
+                            >
+                              <RefreshCw size={14} />
+                              Retake Now
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Profile Link */}
+                    <button
+                      style={styles.profileLink}
+                      onClick={handleGoToProfile}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = '#60a5fa';
+                        e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.5)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = '#93c5fd';
+                        e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+                      }}
+                    >
+                      <User size={14} />
+                      Or manage all languages in your profile
+                      <ArrowRight size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div style={styles.footer}>
+            <button style={styles.cancelButton} onClick={onClose}>
+              Close
+            </button>
+            <button
+              style={{
+                ...styles.joinButton,
+                ...(isLocked ? styles.joinButtonLocked : {}),
+                ...(isJoining ? styles.joinButtonDisabled : {})
+              }}
+              onClick={handleJoinClick}
+              disabled={isLocked || isJoining}
+            >
+              {isLocked ? (
+                <>
+                  <Lock size={18} />
+                  Locked - Improve Match Score
+                </>
+              ) : isJoining ? (
+                <>
+                  <div className="spinner" style={styles.spinner} />
+                  Joining...
+                </>
+              ) : (
+                <>
+                  <Users size={18} />
+                  Join Project
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* PostAssessment Modal */}
+      {showPostAssessmentModal && selectedLanguageForAssessment && (
+        <PostAssessmentModal
+          isOpen={showPostAssessmentModal}
+          onClose={() => {
+            setShowPostAssessmentModal(false);
+            setSelectedLanguageForAssessment(null);
+          }}
+          language={selectedLanguageForAssessment}
+          currentProficiency={selectedLanguageForAssessment.currentProficiency}
+          onAssessmentComplete={handleAssessmentComplete}
+        />
+      )}
+
+      {/* Assessment Result Modal */}
+      {showResultModal && assessmentResult && selectedLanguageForAssessment && (
+        <PostAssessmentResultModal
+          isOpen={showResultModal}
+          onClose={() => {
+            setShowResultModal(false);
+            setSelectedLanguageForAssessment(null);
+            setAssessmentResult(null);
+          }}
+          assessmentResult={assessmentResult}
+          language={selectedLanguageForAssessment}
+          currentProficiency={selectedLanguageForAssessment.currentProficiency}
+          onReturnHome={handleReturnFromAssessment}
+        />
+      )}
+    </>
   );
 };
 
@@ -480,34 +593,6 @@ const styles = {
     justifyContent: 'center',
     borderRadius: '8px',
     transition: 'all 0.2s'
-  },
-  matchBanner: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '12px 16px',
-    backgroundColor: 'rgba(59, 130, 246, 0.15)',
-    borderRadius: '12px',
-    border: '1px solid rgba(59, 130, 246, 0.3)'
-  },
-  matchScore: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    color: '#60a5fa'
-  },
-  matchScoreText: {
-    fontSize: '18px',
-    fontWeight: '700'
-  },
-  matchDetails: {
-    display: 'flex',
-    gap: '12px',
-    fontSize: '13px'
-  },
-  matchDetail: {
-    color: '#93c5fd',
-    fontWeight: '500'
   },
   content: {
     padding: '24px',
@@ -631,26 +716,75 @@ const styles = {
     color: '#6b7280'
   },
   suggestionsBox: {
-    padding: '16px',
-    backgroundColor: 'rgba(251, 191, 36, 0.1)',
-    borderRadius: '10px',
+    padding: '20px',
+    background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%)',
+    borderRadius: '12px',
     border: '1px solid rgba(251, 191, 36, 0.3)'
   },
+  suggestionsHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '16px'
+  },
   suggestionsTitle: {
-    fontSize: '14px',
+    fontSize: '15px',
     fontWeight: '600',
-    color: '#fbbf24',
-    marginBottom: '12px'
+    color: '#fbbf24'
   },
   suggestionsList: {
-    margin: 0,
-    paddingLeft: '20px',
-    color: '#d1d5db'
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    marginBottom: '16px'
   },
   suggestionItem: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    padding: '12px',
+    background: 'rgba(0, 0, 0, 0.2)',
+    borderRadius: '8px',
+    border: '1px solid rgba(251, 191, 36, 0.2)'
+  },
+  suggestionText: {
+    flex: 1,
     fontSize: '13px',
-    marginBottom: '8px',
+    color: '#d1d5db',
     lineHeight: '1.5'
+  },
+  retakeButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '8px 16px',
+    background: 'rgba(16, 185, 129, 0.15)',
+    border: '1px solid rgba(16, 185, 129, 0.3)',
+    borderRadius: '6px',
+    color: '#10b981',
+    fontSize: '12px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    flexShrink: 0
+  },
+  profileLink: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    width: '100%',
+    padding: '10px',
+    background: 'transparent',
+    border: '1px solid rgba(59, 130, 246, 0.3)',
+    borderRadius: '8px',
+    color: '#93c5fd',
+    fontSize: '12px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    marginTop: '4px'
   },
   footer: {
     padding: '20px 24px',
