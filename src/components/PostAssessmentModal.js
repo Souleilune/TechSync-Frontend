@@ -51,30 +51,37 @@ const PostAssessmentModal = ({
     return () => clearInterval(interval);
   }, [startedAt, challenge]);
 
-  const loadChallenge = async () => {
-    try {
-      setLoading(true);
-      setError('');
+ const loadChallenge = async () => {
+  try {
+    setLoading(true);
+    setError('');
 
-      const response = await ChallengeAPI.getChallengeByLanguageAndDifficulty(
-        language.id,
-        currentProficiency
-      );
+    console.log('🔍 Loading challenge for language:', language);
 
-      if (response.success && response.data) {
-        setChallenge(response.data);
-        setSubmittedCode(response.data.starter_code || '');
-      } else {
-        setError('No challenges available for this skill level.');
-      }
-    } catch (err) {
-      console.error('Error loading challenge:', err);
-      setError(err.response?.data?.message || 'Failed to load challenge. Please try again.');
-    } finally {
-      setLoading(false);
+    // ✅ CORRECT - Use getNextChallenge like PreAssessmentModal:
+    const response = await ChallengeAPI.getNextChallenge({ 
+      programming_language_id: language.id 
+    });
+    
+    console.log('📦 Challenge response:', response);
+
+    // Backend returns: { success: true, data: { challenge: {...}, userRating: ... } }
+    if (response.success && response.data && response.data.challenge) {
+      const challengeData = response.data.challenge;
+      console.log('✅ Challenge loaded:', challengeData);
+      
+      setChallenge(challengeData);
+      setSubmittedCode(challengeData.starter_code || '');
+    } else {
+      throw new Error('No challenge available for this language');
     }
-  };
-
+  } catch (err) {
+    console.error('❌ Error loading challenge:', err);
+    setError(err.response?.data?.message || err.message || 'Failed to load challenge. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
   const handleStartChallenge = () => {
     setStartedAt(Date.now());
     if (challenge?.time_limit_minutes) {
