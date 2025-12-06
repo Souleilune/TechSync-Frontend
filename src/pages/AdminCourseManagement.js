@@ -27,6 +27,9 @@ function AdminCourseManagement() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null);
 
+  // ✅ FIX: Use environment variable for API URL (same pattern as other pages)
+  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
   useEffect(() => {
     fetchCourses();
     fetchStats();
@@ -50,7 +53,8 @@ function AdminCourseManagement() {
 
       const queryParams = new URLSearchParams(params);
 
-      const response = await fetch(`/api/admin/courses?${queryParams}`, {
+      // ✅ FIX: Use API_URL constant
+      const response = await fetch(`${API_URL}/admin/courses?${queryParams}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -77,7 +81,8 @@ function AdminCourseManagement() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch('/api/admin/courses/stats', {
+      // ✅ FIX: Use API_URL constant
+      const response = await fetch(`${API_URL}/admin/courses/stats`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -98,12 +103,12 @@ function AdminCourseManagement() {
   };
 
   const handleDeleteCourse = async (courseId) => {
-    if (!window.confirm('Are you sure you want to delete this course?')) {
+    if (!window.confirm('Are you sure you want to delete this course?'))
       return;
-    }
 
     try {
-      const response = await fetch(`/api/admin/courses/${courseId}`, {
+      // ✅ FIX: Use API_URL constant
+      const response = await fetch(`${API_URL}/admin/courses/${courseId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -131,7 +136,8 @@ function AdminCourseManagement() {
     if (!newTitle || !newSlug) return;
 
     try {
-      const response = await fetch(`/api/admin/courses/${courseId}/duplicate`, {
+      // ✅ FIX: Use API_URL constant
+      const response = await fetch(`${API_URL}/admin/courses/${courseId}/duplicate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -155,7 +161,8 @@ function AdminCourseManagement() {
 
   const handleTogglePublish = async (course) => {
     try {
-      const response = await fetch(`/api/admin/courses/${course.id}`, {
+      // ✅ FIX: Use API_URL constant
+      const response = await fetch(`${API_URL}/admin/courses/${course.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -274,7 +281,16 @@ function AdminCourseManagement() {
         {loading ? (
           <div className="loading">Loading courses...</div>
         ) : courses.length === 0 ? (
-          <div className="no-data">No courses found</div>
+          <div className="no-courses">
+            <BookOpen size={48} />
+            <p>No courses found</p>
+            <button 
+              className="btn-primary"
+              onClick={() => setShowCreateModal(true)}
+            >
+              Create Your First Course
+            </button>
+          </div>
         ) : (
           <table className="courses-table">
             <thead>
@@ -292,16 +308,10 @@ function AdminCourseManagement() {
             </thead>
             <tbody>
               {courses.map(course => (
-                <tr 
-                  key={course.id}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => navigate(`/admin/courses/${course.id}/edit`)}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                >
+                <tr key={course.id}>
                   <td>
                     <div className="course-info">
-                      <span className="course-emoji">{course.icon_emoji || '📚'}</span>
+                      <span className="course-emoji">{course.icon_emoji}</span>
                       <div>
                         <div className="course-title">{course.title}</div>
                         <div className="course-slug">{course.slug}</div>
@@ -314,66 +324,49 @@ function AdminCourseManagement() {
                       {course.level}
                     </span>
                   </td>
-                  <td>
-                    <span className={course.total_modules > 0 ? 'count-badge success' : 'count-badge'}>
-                      {course.total_modules || 0}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={course.total_lessons > 0 ? 'count-badge success' : 'count-badge'}>
-                      {course.total_lessons || 0}
-                    </span>
-                  </td>
+                  <td>{course.total_modules || 0}</td>
+                  <td>{course.total_lessons || 0}</td>
                   <td>{course.enrollment_count || 0}</td>
                   <td>
                     <div className="rating">
-                      <Star className="icon-small" />
-                      {course.average_rating?.toFixed(1) || '0.0'}
+                      <Star className="icon" size={14} />
+                      {course.average_rating || 0}
                     </div>
                   </td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <button
-                      className={`status-toggle ${course.is_published ? 'published' : 'draft'}`}
-                      onClick={() => handleTogglePublish(course)}
-                    >
-                      {course.is_published ? (
-                        <><Eye className="icon-small" /> Published</>
-                      ) : (
-                        <><EyeOff className="icon-small" /> Draft</>
-                      )}
-                    </button>
+                  <td>
+                    <span className={`status-badge ${course.is_published ? 'published' : 'draft'}`}>
+                      {course.is_published ? 'Published' : 'Draft'}
+                    </span>
                   </td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <div className="actions">
+                  <td>
+                    <div className="action-buttons">
                       <button
                         className="btn-icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/admin/courses/${course.id}/edit`);
-                        }}
-                        title="Edit Course & Lessons"
+                        onClick={() => navigate(`/admin/courses/${course.id}`)}
+                        title="Edit Course"
                       >
-                        <Edit className="icon" />
+                        <Edit size={16} />
                       </button>
                       <button
                         className="btn-icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDuplicateCourse(course.id);
-                        }}
-                        title="Duplicate"
+                        onClick={() => handleTogglePublish(course)}
+                        title={course.is_published ? 'Unpublish' : 'Publish'}
                       >
-                        <Copy className="icon" />
+                        {course.is_published ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
                       <button
-                        className="btn-icon danger"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteCourse(course.id);
-                        }}
-                        title="Delete"
+                        className="btn-icon"
+                        onClick={() => handleDuplicateCourse(course.id)}
+                        title="Duplicate Course"
                       >
-                        <Trash2 className="icon" />
+                        <Copy size={16} />
+                      </button>
+                      <button
+                        className="btn-icon btn-danger"
+                        onClick={() => handleDeleteCourse(course.id)}
+                        title="Delete Course"
+                      >
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </td>
@@ -422,6 +415,9 @@ function AdminCourseManagement() {
 
 // Create Course Modal Component
 function CreateCourseModal({ onClose, onSuccess }) {
+  // ✅ FIX: Use environment variable for API URL
+  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+  
   const [formData, setFormData] = useState({
     title: '',
     slug: '',
@@ -441,7 +437,8 @@ function CreateCourseModal({ onClose, onSuccess }) {
     setSubmitting(true);
 
     try {
-      const response = await fetch('/api/admin/courses', {
+      // ✅ FIX: Use API_URL constant
+      const response = await fetch(`${API_URL}/admin/courses`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -523,6 +520,26 @@ function CreateCourseModal({ onClose, onSuccess }) {
             </div>
           </div>
 
+          <div className="form-group">
+            <label>Short Description</label>
+            <input
+              type="text"
+              value={formData.short_description}
+              onChange={(e) => setFormData({ ...formData, short_description: e.target.value })}
+              placeholder="Brief description for course cards"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Description *</label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              rows={4}
+              required
+            />
+          </div>
+
           <div className="form-row">
             <div className="form-group">
               <label>Icon Emoji</label>
@@ -547,26 +564,6 @@ function CreateCourseModal({ onClose, onSuccess }) {
           </div>
 
           <div className="form-group">
-            <label>Short Description</label>
-            <input
-              type="text"
-              value={formData.short_description}
-              onChange={(e) => setFormData({ ...formData, short_description: e.target.value })}
-              maxLength="500"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Full Description *</label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              rows="4"
-              required
-            />
-          </div>
-
-          <div className="form-row">
             <label className="checkbox-label">
               <input
                 type="checkbox"
@@ -575,22 +572,24 @@ function CreateCourseModal({ onClose, onSuccess }) {
               />
               Publish immediately
             </label>
+          </div>
 
+          <div className="form-group">
             <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={formData.is_featured}
                 onChange={(e) => setFormData({ ...formData, is_featured: e.target.checked })}
               />
-              Feature on homepage
+              Featured course
             </label>
           </div>
 
-          <div className="form-actions">
+          <div className="modal-actions">
             <button type="button" onClick={onClose} className="btn-secondary">
               Cancel
             </button>
-            <button type="submit" disabled={submitting} className="btn-primary">
+            <button type="submit" className="btn-primary" disabled={submitting}>
               {submitting ? 'Creating...' : 'Create Course'}
             </button>
           </div>
