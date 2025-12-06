@@ -1,6 +1,6 @@
 // frontend/src/components/CourseRecommendationModal.jsx
 // Gamified Dark Theme with Side-by-Side Layout
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   BookOpen, Clock, Award, ChevronRight, Sparkles, CheckCircle, 
   Trophy, Code2, Target, Zap, Shield, Radio, Star, TrendingUp,
@@ -28,6 +28,20 @@ const CourseRecommendationModal = ({
       loadAllCourseRecommendations();
     }
   }, [languages]);
+
+   const autoEnrollCompleted = useRef(false);
+
+  const getUserProficiencyLevel = () => {
+    if (!languages || languages.length === 0) return 'beginner';
+    const avgScore = languages.reduce((sum, lang) => sum + (lang.score || 0), 0) / languages.length;
+    if (avgScore >= 90) return 'expert';
+    if (avgScore >= 75) return 'advanced';
+    if (avgScore >= 60) return 'intermediate';
+    return 'beginner';
+  };
+
+  const proficiencyLevel = getUserProficiencyLevel();
+  const isBeginner = proficiencyLevel === 'beginner';
 
   const loadAllCourseRecommendations = async () => {
     try {
@@ -114,7 +128,34 @@ const CourseRecommendationModal = ({
       setLoading(false);
     }
   };
+   useEffect(() => {
+    if (!loading && isBeginner && !autoEnrollCompleted.current && Object.keys(coursesByLanguage).length > 0) {
+      autoEnrollCompleted.current = true;
+      autoEnrollBeginners();
+    }
+  }, [loading, coursesByLanguage, isBeginner]);
 
+
+  const autoEnrollBeginners = async () => {
+    console.log('🎯 Auto-enrolling beginner in all recommended courses...');
+    
+    const allCourses = [];
+    Object.values(coursesByLanguage).forEach(({ courses }) => {
+      allCourses.push(...courses);
+    });
+
+    if (allCourses.length === 0) {
+      console.log('⚠️ No courses to auto-enroll');
+      return;
+    }
+
+    for (const course of allCourses) {
+      await handleEnrollCourse(course, true);
+    }
+
+    console.log(`✅ Auto-enrolled in ${allCourses.length} courses`);
+  };
+  // END NEW FUNCTION
   const handleViewDetails = (course) => {
     setSelectedCourse(course);
     setShowDetailsModal(true);
@@ -125,7 +166,7 @@ const CourseRecommendationModal = ({
     setSelectedCourse(null);
   };
 
-  const handleEnrollCourse = async (course) => {
+    const handleEnrollCourse = async (course, silent = false) => {
     try {
       const courseId = extractCourseId(course);
       if (!courseId) return;
@@ -145,6 +186,10 @@ const CourseRecommendationModal = ({
 
       if (data.success) {
         setSavedCourses(prev => new Set(prev).add(courseId));
+        // ADD THIS LINE:
+        if (!silent) {
+          console.log('✅ Successfully enrolled in course:', courseId);
+        }
       }
     } catch (err) {
       console.error('❌ Error enrolling in course:', err);
@@ -1082,9 +1127,10 @@ const CourseRecommendationModal = ({
                                   Details
                                 </button>
 
-                                <button
+                               <button
                                   onClick={() => handleEnrollCourse(course)}
-                                  disabled={isEnrolled(course) || isEnrolling(course)}
+                                  // MODIFY THIS LINE - add isBeginner check:
+                                  disabled={isEnrolled(course) || isEnrolling(course) || isBeginner}
                                   className="enroll-button"
                                   style={{
                                     flex: 1,
@@ -1094,7 +1140,8 @@ const CourseRecommendationModal = ({
                                     ...(isEnrolling(course) ? styles.enrollingButton : {})
                                   }}
                                 >
-                                  {isEnrolled(course) ? (
+                                  {/* MODIFY THIS - add isBeginner check: */}
+                                  {isEnrolled(course) || (isBeginner && !isEnrolling(course)) ? (
                                     <>
                                       <CheckCircle size={14} />
                                       Enrolled
@@ -1124,23 +1171,44 @@ const CourseRecommendationModal = ({
           </div>
 
           {/* Footer */}
-          <div style={styles.footer}>
-            <button 
-              onClick={handleSkipClick} 
-              style={{ ...styles.button, ...styles.secondaryButton }}
-              className="skip-button"
-            >
-              Skip for Now
-            </button>
-            <button 
-              onClick={handleContinue} 
-              style={{ ...styles.button, ...styles.primaryButton }}
-              className="cta-button"
-            >
-              <span style={styles.buttonGlow} className="button-glow" />
-              Continue {savedCourses.size > 0 && `(${savedCourses.size} enrolled)`}
-              <ChevronRight size={18} />
-            </button>
+           <div style={styles.footer}>
+            {/* REPLACE THE FOOTER CONTENT WITH THIS: */}
+            {isBeginner ? (
+              // Beginners only see Continue button
+              <button 
+                onClick={handleContinue} 
+                style={{ 
+                  ...styles.button, 
+                  ...styles.primaryButton,
+                  width: '100%'
+                }}
+                className="cta-button"
+              >
+                <span style={styles.buttonGlow} className="button-glow" />
+                Continue to Dashboard ({savedCourses.size} courses enrolled)
+                <ChevronRight size={18} />
+              </button>
+            ) : (
+              // Intermediate+ users see Skip and Continue buttons
+              <>
+                <button 
+                  onClick={handleSkipClick} 
+                  style={{ ...styles.button, ...styles.secondaryButton }}
+                  className="skip-button"
+                >
+                  Skip for Now
+                </button>
+                <button 
+                  onClick={handleContinue} 
+                  style={{ ...styles.button, ...styles.primaryButton }}
+                  className="cta-button"
+                >
+                  <span style={styles.buttonGlow} className="button-glow" />
+                  Continue {savedCourses.size > 0 && `(${savedCourses.size} enrolled)`}
+                  <ChevronRight size={18} />
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
