@@ -202,15 +202,15 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
     overlay: {
       position: 'fixed',
       top: 0,
-      left: 0,
+      left: '240px',
       right: 0,
       bottom: 0,
       backgroundColor: 'rgba(0, 0, 0, 0.92)',
       display: 'flex',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       justifyContent: 'center',
       zIndex: 10000,
-      padding: '20px',
+      padding: '40px 20px 20px 20px' ,
       backdropFilter: 'blur(12px)',
       animation: 'fadeIn 0.3s ease-out'
     },
@@ -220,7 +220,7 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
       borderRadius: '24px',
       maxWidth: '950px',
       width: '100%',
-      maxHeight: '90vh',
+      maxHeight: 'calc(100vh - 80px)',
       display: 'flex',
       flexDirection: 'column',
       boxShadow: '0 30px 60px -12px rgba(0, 0, 0, 0.6)',
@@ -652,20 +652,29 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
 
   // NOW check loading state - after keyframes and styles are defined
   if (loading) {
-    return (
-      <>
-        <style>{keyframes}</style>
-        <div style={styles.overlay} onClick={onClose}>
-          <div style={{...styles.modal, padding: '60px', justifyContent: 'center', alignItems: 'center'}} onClick={(e) => e.stopPropagation()}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={styles.spinner} />
-              <p style={{ color: '#64748b', marginTop: '20px', fontSize: '14px' }}>Loading course details...</p>
-            </div>
+  return (
+    <>
+      <style>{keyframes}</style>
+      <div style={styles.overlay} onClick={onClose}>
+        <div 
+          style={{
+            ...styles.modal, 
+            padding: '60px', 
+            display: 'flex',           // ✅ ADD THIS
+            justifyContent: 'center', 
+            alignItems: 'center'
+          }} 
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ textAlign: 'center' }}>
+            <div style={styles.spinner} />
+            <p style={{ color: '#64748b', marginTop: '20px', fontSize: '14px' }}>Loading course details...</p>
           </div>
         </div>
-      </>
-    );
-  }
+      </div>
+    </>
+  );
+}
 
   if (!courseDetails) {
     return null;
