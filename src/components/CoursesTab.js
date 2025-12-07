@@ -2,11 +2,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen } from 'lucide-react';
+import CourseDetailsModal from './CourseDetailsModal';
 
 const CoursesTab = () => {
   const navigate = useNavigate();
   const [unenrolledCourses, setUnenrolledCourses] = useState([]);
   const [loadingCourses, setLoadingCourses] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState(null);
+  const [showCourseDetail, setShowCourseDetail] = useState(false);
+  const [enrollingCourseId, setEnrollingCourseId] = useState(null);
 
   useEffect(() => {
     fetchUnenrolledCourses();
@@ -53,7 +57,15 @@ const CoursesTab = () => {
     }
   };
 
-  const handleEnrollInCourse = async (courseId) => {
+  const handleCourseClick = (course) => {
+    setSelectedCourse(course);
+    setShowCourseDetail(true);
+  };
+
+  const handleEnrollInCourse = async (course) => {
+    const courseId = course.id || course.courseId;
+    setEnrollingCourseId(courseId);
+
     try {
       const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
       const response = await fetch(`${API_URL}/courses/${courseId}/enroll`, {
@@ -67,13 +79,24 @@ const CoursesTab = () => {
       const data = await response.json();
 
       if (data.success) {
+        // Close modal
+        setShowCourseDetail(false);
+        setSelectedCourse(null);
+        
         // Navigate to the course
         navigate(`/course/${courseId}`);
       }
     } catch (err) {
       console.error('Error enrolling in course:', err);
       alert('Failed to enroll in course');
+    } finally {
+      setEnrollingCourseId(null);
     }
+  };
+
+  const handleCloseModal = () => {
+    setShowCourseDetail(false);
+    setSelectedCourse(null);
   };
 
   return (
@@ -83,7 +106,7 @@ const CoursesTab = () => {
         Available Courses
       </h3>
       <p style={styles.sectionDescription}>
-        Internal courses recommended during onboarding that you haven't enrolled in yet.
+        Internal courses recommended during onboarding that you haven't enrolled in yet. Click to view course outline.
       </p>
 
       {loadingCourses ? (
@@ -108,6 +131,7 @@ const CoursesTab = () => {
             <div
               key={course.id}
               style={styles.courseCard}
+              onClick={() => handleCourseClick(course)}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = '#8b5cf6';
                 e.currentTarget.style.transform = 'translateY(-4px)';
@@ -180,25 +204,24 @@ const CoursesTab = () => {
                 )}
               </div>
 
-              {/* Enroll Button */}
-              <button
-                onClick={() => handleEnrollInCourse(course.id)}
-                style={styles.enrollButton}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'scale(1.02)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.4)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              >
-                <BookOpen size={16} />
-                Enroll Now
-              </button>
+              {/* View Details Text */}
+              <div style={styles.viewDetailsText}>
+                Click to view course outline →
+              </div>
             </div>
           ))}
         </div>
+      )}
+
+      {/* Use Existing Course Detail Modal */}
+      {showCourseDetail && selectedCourse && (
+        <CourseDetailsModal
+          course={selectedCourse}
+          onClose={handleCloseModal}
+          onEnroll={handleEnrollInCourse}
+          isEnrolled={false}
+          isEnrolling={enrollingCourseId === (selectedCourse.id || selectedCourse.courseId)}
+        />
       )}
     </div>
   );
@@ -259,7 +282,8 @@ const styles = {
     borderRadius: '12px',
     padding: '20px',
     transition: 'all 0.3s ease',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    position: 'relative'
   },
   courseIcon: {
     fontSize: '32px',
@@ -302,27 +326,18 @@ const styles = {
     alignItems: 'center',
     paddingTop: '12px',
     borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-    marginBottom: '16px'
+    marginBottom: '12px'
   },
   statsText: {
     color: '#9ca3af',
     fontSize: '12px'
   },
-  enrollButton: {
-    width: '100%',
-    background: 'linear-gradient(to right, #8b5cf6, #7c3aed)',
-    color: 'white',
-    border: 'none',
-    padding: '12px',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '600',
-    transition: 'all 0.2s ease',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px'
+  viewDetailsText: {
+    color: '#8b5cf6',
+    fontSize: '13px',
+    fontWeight: '500',
+    textAlign: 'center',
+    paddingTop: '8px'
   }
 };
 
