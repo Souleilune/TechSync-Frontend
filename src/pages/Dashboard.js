@@ -2079,9 +2079,7 @@ useEffect(() => {
             >
               Solo Projects
             </button>
-          </div>
-
-          <button
+            <button
             style={{
               ...styles.tabButton,
               backgroundColor: activeTab === 'courses' ? '#1a1d24' : 'transparent',
@@ -2091,6 +2089,9 @@ useEffect(() => {
           >
             Courses
           </button>
+          </div>
+
+          
 
           <div style={styles.tabContent}>
             {activeTab === 'home' && (
