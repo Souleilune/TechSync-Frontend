@@ -2134,12 +2134,13 @@ useEffect(() => {
                   padding: '24px'
                 }}>
                   <AIChatInterface />
-                  {activeTab === 'courses' && (
-    <CoursesTab />
-  )}
+                  
                 </div>
               </div>
             )}
+            {activeTab === 'courses' && (
+    <CoursesTab />
+  )}
           </div>
         </div>
 
