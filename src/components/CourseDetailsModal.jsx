@@ -210,7 +210,7 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
       alignItems: 'flex-start',
       justifyContent: 'center',
       zIndex: 10000,
-      padding: '95px 20px 20px 20px' ,
+      padding: '85px 20px 20px 20px' ,
       backdropFilter: 'blur(12px)',
       animation: 'fadeIn 0.3s ease-out'
     },
