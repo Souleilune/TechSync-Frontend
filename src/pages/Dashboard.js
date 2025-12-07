@@ -100,12 +100,7 @@ const EnhancedProjectCard = ({
     }
   }, [showScoreModal]);
 
-  useEffect(() => {
-  if (activeTab === 'courses') {
-    fetchUnenrolledCourses();
-  }
-}, [activeTab]);
-
+ 
 
   useEffect(() => {
     if (!showScoreModal) return;
