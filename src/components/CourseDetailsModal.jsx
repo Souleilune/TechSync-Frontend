@@ -202,15 +202,15 @@ const CourseDetailsModal = ({ course, onClose, onEnroll, isEnrolled, isEnrolling
     overlay: {
       position: 'fixed',
       top: 0,
-      left: '240px',
+      left: '0',
       right: 0,
       bottom: 0,
       backgroundColor: 'rgba(0, 0, 0, 0.92)',
       display: 'flex',
-      alignItems: 'flex-start',
+      alignItems: 'center',
       justifyContent: 'center',
       zIndex: 10000,
-      padding: '85px 20px 20px 20px' ,
+      padding: '80px 20px 20px 20px' ,
       backdropFilter: 'blur(12px)',
       animation: 'fadeIn 0.3s ease-out'
     },
