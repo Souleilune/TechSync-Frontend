@@ -15,6 +15,8 @@ const CourseRecommendationModal = ({
   onContinue, 
   onSkip 
 }) => {
+  console.log('📊 Languages received:', languages);
+  console.log('📊 Languages count:', languages?.length);
   const [coursesByLanguage, setCoursesByLanguage] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
