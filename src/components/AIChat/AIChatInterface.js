@@ -1,5 +1,5 @@
-// frontend/src/components/AIChat/AIChatInterface.js - FIXED VERSION
-// This version has IMPROVED project detection that catches more variations
+// frontend/src/components/AIChat/AIChatInterface.js - UPDATED THEME
+// Matches Dashboard dark theme with subtle gradients and modern styling
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -673,32 +673,32 @@ What would you like to work on today?`,
         style={{
           maxWidth: '85%',
           fontSize: '14px',
-          lineHeight: '1.6',
+          lineHeight: '1.7',
           position: 'relative',
           ...(message.role === 'user' ? {
             alignSelf: 'flex-end',
             background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
             color: 'white',
-            padding: '16px 20px',
-            borderRadius: '20px 20px 6px 20px',
-            boxShadow: '0 8px 24px rgba(59, 130, 246, 0.3)',
+            padding: '14px 18px',
+            borderRadius: '16px 16px 4px 16px',
+            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.25)',
             border: '1px solid rgba(255, 255, 255, 0.1)'
           } : {
             alignSelf: 'flex-start',
-            backgroundColor: 'rgba(30, 33, 39, 0.8)',
+            backgroundColor: 'rgba(26, 28, 32, 0.8)',
             color: '#e2e8f0',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            padding: '20px',
-            borderRadius: '20px 20px 20px 6px',
-            backdropFilter: 'blur(12px)',
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            padding: '16px 20px',
+            borderRadius: '16px 16px 16px 4px',
+            backdropFilter: 'blur(20px)',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
             ...(isClickableProject ? {
               cursor: 'pointer',
-              border: '2px solid rgba(59, 130, 246, 0.3)',
+              border: '1px solid rgba(59, 130, 246, 0.2)',
               ...(isHovered ? {
-                borderColor: '#3b82f6',
-                transform: 'translateY(-2px)',
-                boxShadow: '0 12px 30px rgba(59, 130, 246, 0.25)'
+                borderColor: 'rgba(59, 130, 246, 0.4)',
+                transform: 'translateY(-1px)',
+                boxShadow: '0 6px 16px rgba(59, 130, 246, 0.2)'
               } : {})
             } : {})
           })
@@ -707,7 +707,15 @@ What would you like to work on today?`,
         onMouseLeave={() => isClickableProject && setIsHovered(false)}
       >
         {message.role === 'assistant' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', fontSize: '12px', color: '#94a3b8' }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px', 
+            marginBottom: '10px', 
+            fontSize: '11px', 
+            color: '#64748b',
+            fontWeight: '500'
+          }}>
             <Bot size={14} />
             <span>Sync</span>
             <span>•</span>
@@ -718,18 +726,18 @@ What would you like to work on today?`,
         {isBeingCreated && (
           <div style={{
             position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(59, 130, 246, 0.1)', borderRadius: '20px',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)', borderRadius: '16px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             backdropFilter: 'blur(4px)', zIndex: 10
           }}>
             <div style={{
               background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white',
-              padding: '12px 20px', borderRadius: '12px', fontSize: '14px',
-              fontWeight: '600', display: 'flex', alignItems: 'center', gap: '12px',
-              boxShadow: '0 8px 24px rgba(59, 130, 246, 0.3)'
+              padding: '10px 18px', borderRadius: '10px', fontSize: '13px',
+              fontWeight: '600', display: 'flex', alignItems: 'center', gap: '10px',
+              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
             }}>
               <div style={{
-                width: '20px', height: '20px', border: '2px solid rgba(255, 255, 255, 0.3)',
+                width: '18px', height: '18px', border: '2px solid rgba(255, 255, 255, 0.3)',
                 borderTop: '2px solid white', borderRadius: '50%', animation: 'spin 1s linear infinite'
               }}></div>
               Creating project with tasks...
@@ -740,43 +748,31 @@ What would you like to work on today?`,
         {isClickableProject && isHovered && !creatingProject && (
           <button
             style={{
-              position: 'absolute', top: '12px', right: '12px',
-              padding: '8px 16px', background: 'linear-gradient(135deg, #10b981, #059669)',
-              color: 'white', border: 'none', borderRadius: '12px',
-              fontSize: '12px', cursor: 'pointer', fontWeight: '600',
-              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
-              display: 'flex', alignItems: 'center', gap: '6px'
+              position: 'absolute', top: '10px', right: '10px',
+              padding: '6px 14px', background: 'linear-gradient(135deg, #10b981, #059669)',
+              color: 'white', border: 'none', borderRadius: '10px',
+              fontSize: '11px', cursor: 'pointer', fontWeight: '600',
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
+              display: 'flex', alignItems: 'center', gap: '6px',
+              transition: 'all 0.2s ease'
             }}
             onClick={(e) => {
               e.stopPropagation();
-              console.log('═══════════════════════════════════════════════');
-              console.log('🖱️ PREVIEW BUTTON CLICKED');
-              console.log('═══════════════════════════════════════════════');
-              console.log('📄 Message content length:', message.content.length);
-              
               const projects = extractProjectDataFromText(message.content);
-              
-              console.log('📊 Extracted projects count:', projects.length);
-              
               if (projects.length > 0) {
-                console.log('📋 First project:', projects[0]);
-                console.log('📋 First project tasks:', projects[0].tasks?.length || 0);
-                
-                if (projects[0].tasks && projects[0].tasks.length > 0) {
-                  console.log('📋 First project task titles:', projects[0].tasks.map(t => t.title));
-                } else {
-                  console.error('⚠️ EXTRACTED PROJECT HAS NO TASKS!');
-                }
-                console.log('═══════════════════════════════════════════════');
-                
                 onShowPreview(projects[0]);
-              } else {
-                console.error('⚠️ NO PROJECTS EXTRACTED!');
-                console.log('═══════════════════════════════════════════════');
               }
             }}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'scale(1.05)';
+              e.target.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.4)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'scale(1)';
+              e.target.style.boxShadow = '0 2px 8px rgba(16, 185, 129, 0.3)';
+            }}
           >
-            <Sparkles size={14} />
+            <Sparkles size={12} />
             Preview Project
           </button>
         )}
@@ -784,31 +780,31 @@ What would you like to work on today?`,
         <div>
           {message.content.split('\n').map((line, index) => {
             if (line.startsWith('**') && line.endsWith('**')) {
-              return <div key={index} style={{ fontWeight: 'bold', marginBottom: '12px', fontSize: '16px', color: '#60a5fa' }}>
+              return <div key={index} style={{ fontWeight: 'bold', marginBottom: '10px', fontSize: '15px', color: '#60a5fa' }}>
                 {line.replace(/\*\*/g, '')}
               </div>;
             }
             if (line.startsWith('• ')) {
-              return <div key={index} style={{ marginLeft: '20px', marginBottom: '6px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>•</span>
-                <span>{line.substring(2)}</span>
+              return <div key={index} style={{ marginLeft: '16px', marginBottom: '6px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                <span style={{ color: '#3b82f6', fontWeight: 'bold', fontSize: '12px' }}>•</span>
+                <span style={{ color: '#cbd5e1' }}>{line.substring(2)}</span>
               </div>;
             }
             if (line.match(/^Week\s+\d+/i)) {
-              return <div key={index} style={{ fontWeight: '600', marginTop: '12px', marginBottom: '8px', color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CheckCircle size={16} />
+              return <div key={index} style={{ fontWeight: '600', marginTop: '10px', marginBottom: '6px', color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+                <CheckCircle size={14} />
                 {line}
               </div>;
             }
             if (line.startsWith('- ')) {
-              return <div key={index} style={{ marginLeft: '32px', marginBottom: '4px', color: '#cbd5e1', fontSize: '13px' }}>
+              return <div key={index} style={{ marginLeft: '28px', marginBottom: '4px', color: '#94a3b8', fontSize: '12px' }}>
                 {line}
               </div>;
             }
             if (line === '---') {
-              return <hr key={index} style={{ margin: '20px 0', border: 'none', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }} />;
+              return <hr key={index} style={{ margin: '16px 0', border: 'none', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }} />;
             }
-            return <div key={index} style={line ? { marginBottom: '8px' } : { marginBottom: '12px' }}>
+            return <div key={index} style={line ? { marginBottom: '6px' } : { marginBottom: '10px' }}>
               {line || <br />}
             </div>;
           })}
@@ -816,15 +812,15 @@ What would you like to work on today?`,
         
         {isClickableProject && !creatingProject && (
           <div style={{
-            marginTop: '16px', padding: '16px 20px',
-            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.05))',
-            borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.2)',
-            fontSize: '13px', color: '#93c5fd', fontWeight: '500',
+            marginTop: '12px', padding: '12px 16px',
+            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(147, 51, 234, 0.04))',
+            borderRadius: '10px', border: '1px solid rgba(59, 130, 246, 0.15)',
+            fontSize: '12px', color: '#64748b', fontWeight: '500',
             textAlign: 'center', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', gap: '8px'
+            justifyContent: 'center', gap: '6px'
           }}>
-            <Sparkles size={16} />
-            Hover over this message and click "Preview Project" to see details before creating!
+            <Sparkles size={14} />
+            Hover to preview this project before creating
           </div>
         )}
       </div>
@@ -833,57 +829,276 @@ What would you like to work on today?`,
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg, rgba(15, 17, 22, 0.95), rgba(26, 28, 32, 0.95))',
-      borderRadius: '16px',
-      border: '1px solid rgba(255, 255, 255, 0.1)',
-      height: '650px',
       position: 'relative',
+      background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.6) 0%, rgba(7, 11, 20, 0.8) 100%)',
+      borderRadius: '20px',
+      border: '1px solid rgba(59, 130, 246, 0.15)',
+      height: '650px',
       backdropFilter: 'blur(20px)',
       color: 'white',
-      boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
-      overflow: 'hidden'
+      boxShadow: '0 8px 30px rgba(0, 0, 0, 0.3), inset 0 0 40px rgba(59, 130, 246, 0.03)',
+      overflow: 'hidden',
+      animation: 'borderGlow 4s ease-in-out infinite'
     }}>
-      
-      {/* Header */}
+      {/* Grid Overlay */}
       <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundImage: `
+          linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px)
+        `,
+        backgroundSize: '40px 40px',
+        pointerEvents: 'none',
+        borderRadius: '20px',
+        zIndex: 0
+      }} />
+
+      {/* Animated Scan Line */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '3px',
+        background: 'linear-gradient(90deg, transparent, #3b82f6, #8b5cf6, transparent)',
+        animation: 'scanLine 3s ease-in-out infinite',
+        boxShadow: '0 0 20px #3b82f6, 0 0 40px #3b82f6',
+        zIndex: 1
+      }} />
+
+      {/* Floating Particles */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        pointerEvents: 'none',
+        zIndex: 0,
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          position: 'absolute',
+          width: '4px',
+          height: '4px',
+          backgroundColor: '#3b82f6',
+          borderRadius: '50%',
+          top: '20%',
+          left: '10%',
+          animation: 'float 6s ease-in-out infinite',
+          boxShadow: '0 0 10px #3b82f6'
+        }} />
+        <div style={{
+          position: 'absolute',
+          width: '3px',
+          height: '3px',
+          backgroundColor: '#8b5cf6',
+          borderRadius: '50%',
+          top: '40%',
+          right: '15%',
+          animation: 'float 8s ease-in-out infinite',
+          animationDelay: '2s',
+          boxShadow: '0 0 8px #8b5cf6'
+        }} />
+        <div style={{
+          position: 'absolute',
+          width: '5px',
+          height: '5px',
+          backgroundColor: '#10b981',
+          borderRadius: '50%',
+          bottom: '30%',
+          left: '20%',
+          animation: 'float 7s ease-in-out infinite',
+          animationDelay: '1s',
+          boxShadow: '0 0 12px #10b981'
+        }} />
+        <div style={{
+          position: 'absolute',
+          width: '3px',
+          height: '3px',
+          backgroundColor: '#3b82f6',
+          borderRadius: '50%',
+          bottom: '20%',
+          right: '25%',
+          animation: 'float 9s ease-in-out infinite',
+          animationDelay: '3s',
+          boxShadow: '0 0 8px #3b82f6'
+        }} />
+      </div>
+      
+      {/* Corner Accents */}
+      <svg style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '80px',
+        height: '80px',
+        pointerEvents: 'none',
+        zIndex: 1
+      }} viewBox="0 0 100 100">
+        <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.5)" strokeWidth="2">
+          <animate attributeName="stroke" values="rgba(59, 130, 246, 0.3);rgba(59, 130, 246, 0.8);rgba(59, 130, 246, 0.3)" dur="3s" repeatCount="indefinite"/>
+        </path>
+        <circle cx="0" cy="0" r="4" fill="#3b82f6" opacity="0.8">
+          <animate attributeName="opacity" values="0.4;1;0.4" dur="2s" repeatCount="indefinite"/>
+        </circle>
+      </svg>
+      <svg style={{
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        width: '80px',
+        height: '80px',
+        transform: 'scaleX(-1)',
+        pointerEvents: 'none',
+        zIndex: 1
+      }} viewBox="0 0 100 100">
+        <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(59, 130, 246, 0.5)" strokeWidth="2">
+          <animate attributeName="stroke" values="rgba(59, 130, 246, 0.3);rgba(59, 130, 246, 0.8);rgba(59, 130, 246, 0.3)" dur="3s" repeatCount="indefinite"/>
+        </path>
+        <circle cx="0" cy="0" r="4" fill="#3b82f6" opacity="0.8">
+          <animate attributeName="opacity" values="0.4;1;0.4" dur="2s" repeatCount="indefinite"/>
+        </circle>
+      </svg>
+      <svg style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        width: '80px',
+        height: '80px',
+        transform: 'scaleY(-1)',
+        pointerEvents: 'none',
+        zIndex: 1
+      }} viewBox="0 0 100 100">
+        <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(139, 92, 246, 0.5)" strokeWidth="2">
+          <animate attributeName="stroke" values="rgba(139, 92, 246, 0.3);rgba(139, 92, 246, 0.8);rgba(139, 92, 246, 0.3)" dur="3s" repeatCount="indefinite"/>
+        </path>
+        <circle cx="0" cy="0" r="4" fill="#8b5cf6" opacity="0.8">
+          <animate attributeName="opacity" values="0.4;1;0.4" dur="2s" repeatCount="indefinite"/>
+        </circle>
+      </svg>
+      <svg style={{
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        width: '80px',
+        height: '80px',
+        transform: 'scale(-1)',
+        pointerEvents: 'none',
+        zIndex: 1
+      }} viewBox="0 0 100 100">
+        <path d="M0 40 L0 0 L40 0" fill="none" stroke="rgba(139, 92, 246, 0.5)" strokeWidth="2">
+          <animate attributeName="stroke" values="rgba(139, 92, 246, 0.3);rgba(139, 92, 246, 0.8);rgba(139, 92, 246, 0.3)" dur="3s" repeatCount="indefinite"/>
+        </path>
+        <circle cx="0" cy="0" r="4" fill="#8b5cf6" opacity="0.8">
+          <animate attributeName="opacity" values="0.4;1;0.4" dur="2s" repeatCount="indefinite"/>
+        </circle>
+      </svg>
+      
+      {/* Header with Hexagon Badge */}
+      <div style={{
+        position: 'relative',
+        zIndex: 2,
         padding: '20px 24px',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-        background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.05))'
+        borderBottom: '1px solid rgba(59, 130, 246, 0.15)',
+        background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(7, 11, 20, 0.6))',
+        backdropFilter: 'blur(12px)'
       }}>
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
-          <div>
-            <h3 style={{
-              margin: 0,
-              fontSize: '20px',
-              fontWeight: '700',
-              color: 'white',
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {/* Animated Hexagon Badge */}
+            <div style={{
+              position: 'relative',
+              width: '50px',
+              height: '58px',
               display: 'flex',
               alignItems: 'center',
-              gap: '12px'
+              justifyContent: 'center'
             }}>
-              <MessageCircle size={24} />
-              Chat with Sync
-            </h3>
-            <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: '500' }}>Your AI coding companion</div>
+              <svg style={{ 
+                position: 'absolute', 
+                width: '100%', 
+                height: '100%',
+                filter: 'drop-shadow(0 0 12px rgba(59, 130, 246, 0.5))',
+                animation: 'hexPulse 3s ease-in-out infinite'
+              }} viewBox="0 0 50 58">
+                <defs>
+                  <linearGradient id="hexGradChat" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.8"/>
+                    <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.8"/>
+                  </linearGradient>
+                </defs>
+                <polygon 
+                  points="25,2 47,14 47,44 25,56 3,44 3,14" 
+                  fill="rgba(15, 23, 42, 0.9)"
+                  stroke="url(#hexGradChat)"
+                  strokeWidth="2"
+                />
+              </svg>
+              <MessageCircle size={22} color="#3b82f6" style={{ position: 'relative', zIndex: 2 }} />
+            </div>
+            
+            <div>
+              <h3 style={{
+                margin: 0,
+                fontSize: '20px',
+                fontWeight: '800',
+                background: 'linear-gradient(135deg, #ffffff 0%, #94a3b8 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+                letterSpacing: '-0.5px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                Sync AI Assistant
+              </h3>
+              <div style={{ 
+                fontSize: '11px', 
+                color: '#64748b', 
+                fontWeight: '600', 
+                marginTop: '4px',
+                letterSpacing: '1px',
+                textTransform: 'uppercase'
+              }}>Neural Code Generation Engine</div>
+            </div>
           </div>
+          
           <div style={{
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            padding: '6px 12px',
-            background: 'rgba(16, 185, 129, 0.1)',
+            padding: '8px 16px',
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.1))',
             borderRadius: '20px',
-            border: '1px solid rgba(16, 185, 129, 0.3)'
+            border: '1px solid rgba(16, 185, 129, 0.3)',
+            boxShadow: '0 0 20px rgba(16, 185, 129, 0.2), inset 0 0 10px rgba(16, 185, 129, 0.1)'
           }}>
             <div style={{
-              width: '6px', height: '6px', borderRadius: '50%',
-              backgroundColor: '#10b981', animation: 'pulse 2s infinite'
+              width: '8px', 
+              height: '8px', 
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, #10b981 0%, #059669 100%)',
+              animation: 'pulse 2s infinite',
+              boxShadow: '0 0 12px #10b981, 0 0 24px #10b981'
             }}></div>
-            <span style={{ fontSize: '12px', color: '#10b981', fontWeight: '500' }}>Online</span>
+            <span style={{ 
+              fontSize: '11px', 
+              color: '#10b981', 
+              fontWeight: '700',
+              textTransform: 'uppercase',
+              letterSpacing: '1.5px',
+              textShadow: '0 0 10px rgba(16, 185, 129, 0.5)'
+            }}>ONLINE</span>
           </div>
         </div>
       </div>
@@ -891,28 +1106,31 @@ What would you like to work on today?`,
       {/* Messages */}
       <div style={{
         position: 'absolute',
-        top: '80px',
-        bottom: '88px',
+        top: '82px',
+        bottom: '90px',
         left: 0,
         right: 0,
         overflowY: 'auto',
         padding: '24px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '20px'
+        gap: '18px',
+        zIndex: 2
       }} className="messages-scrollbar">
         {messages.length === 1 && (
           <div style={{ marginBottom: '20px' }}>
             <div style={{
-              fontSize: '14px',
+              fontSize: '13px',
               fontWeight: '600',
-              color: '#e2e8f0',
-              marginBottom: '16px',
+              color: '#cbd5e1',
+              marginBottom: '14px',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px'
+              gap: '8px',
+              textTransform: 'uppercase',
+              letterSpacing: '1px'
             }}>
-              <Lightbulb size={16} />
+              <Lightbulb size={16} color="#3b82f6" />
               Quick Start Ideas
             </div>
             <div style={{
@@ -924,33 +1142,63 @@ What would you like to work on today?`,
                 <button
                   key={index}
                   style={{
-                    padding: '12px 16px',
-                    background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.05))',
-                    color: '#e2e8f0',
-                    border: '1px solid rgba(59, 130, 246, 0.2)',
-                    borderRadius: '12px',
+                    position: 'relative',
+                    padding: '14px 18px',
+                    background: 'linear-gradient(135deg, rgba(51, 65, 85, 0.12), rgba(30, 41, 59, 0.08))',
+                    color: '#cbd5e1',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '14px',
                     fontSize: '13px',
                     cursor: 'pointer',
                     textAlign: 'left',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '10px',
-                    backdropFilter: 'blur(8px)'
+                    gap: '12px',
+                    backdropFilter: 'blur(8px)',
+                    transition: 'all 0.3s ease',
+                    fontWeight: '600',
+                    overflow: 'hidden'
                   }}
                   onClick={() => setInputMessage(action.text)}
                   onMouseEnter={(e) => {
-                    e.target.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
-                    e.target.style.transform = 'translateY(-2px)';
-                    e.target.style.boxShadow = '0 8px 20px rgba(59, 130, 246, 0.15)';
+                    e.target.style.background = 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.15))';
+                    e.target.style.borderColor = 'rgba(59, 130, 246, 0.4)';
+                    e.target.style.transform = 'translateY(-3px) scale(1.02)';
+                    e.target.style.boxShadow = '0 8px 20px rgba(59, 130, 246, 0.25), 0 0 40px rgba(59, 130, 246, 0.1)';
+                    e.target.style.color = '#60a5fa';
                   }}
                   onMouseLeave={(e) => {
-                    e.target.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
-                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.background = 'linear-gradient(135deg, rgba(51, 65, 85, 0.12), rgba(30, 41, 59, 0.08))';
+                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                    e.target.style.transform = 'translateY(0) scale(1)';
                     e.target.style.boxShadow = 'none';
+                    e.target.style.color = '#cbd5e1';
                   }}
                 >
-                  {action.icon}
-                  {action.text}
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.1))',
+                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    transition: 'all 0.3s ease'
+                  }}>
+                    {action.icon}
+                  </div>
+                  <span style={{ flex: 1 }}>{action.text}</span>
+                  <div style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: '#3b82f6',
+                    opacity: 0,
+                    transition: 'opacity 0.3s ease',
+                    boxShadow: '0 0 8px #3b82f6'
+                  }} className="action-indicator" />
                 </button>
               ))}
             </div>
@@ -977,19 +1225,23 @@ What would you like to work on today?`,
             alignSelf: 'flex-start',
             maxWidth: '85%',
             padding: '16px 20px',
-            backgroundColor: 'rgba(30, 33, 39, 0.6)',
-            color: '#94a3b8',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '20px 20px 20px 6px',
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            color: '#64748b',
+            border: '1px solid rgba(59, 130, 246, 0.15)',
+            borderRadius: '16px 16px 16px 4px',
             fontSize: '14px',
             display: 'flex',
             alignItems: 'center',
             gap: '12px',
-            backdropFilter: 'blur(12px)'
+            backdropFilter: 'blur(12px)',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)'
           }}>
             <div style={{
-              width: '20px', height: '20px', border: '2px solid rgba(255, 255, 255, 0.3)',
-              borderTop: '2px solid white', borderRadius: '50%', animation: 'spin 1s linear infinite'
+              width: '20px', height: '20px', 
+              border: '2px solid rgba(59, 130, 246, 0.3)',
+              borderTop: '2px solid #3b82f6', 
+              borderRadius: '50%', 
+              animation: 'spin 1s linear infinite'
             }}></div>
             Sync is thinking...
           </div>
@@ -1004,19 +1256,16 @@ What would you like to work on today?`,
         bottom: 0,
         left: 0,
         right: 0,
-        height: '50px',
         padding: '20px 24px',
-        borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-        background: 'linear-gradient(135deg, rgba(15, 17, 22, 0.95), rgba(26, 28, 32, 0.8))',
+        borderTop: '1px solid rgba(59, 130, 246, 0.15)',
+        background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(7, 11, 20, 0.98) 100%)',
         backdropFilter: 'blur(12px)',
-        borderBottomLeftRadius: '16px',
-        borderBottomRightRadius: '16px'
+        zIndex: 2
       }}>
         <form onSubmit={handleSendMessage} style={{
           display: 'flex',
-          gap: '16px',
-          alignItems: 'center',
-          height: '56px'
+          gap: '14px',
+          alignItems: 'center'
         }}>
           <textarea
             ref={textareaRef}
@@ -1025,18 +1274,20 @@ What would you like to work on today?`,
             placeholder="Ask me anything about coding projects..."
             style={{
               flex: 1,
-              padding: '16px 20px',
-              border: '2px solid rgba(255, 255, 255, 0.1)',
-              borderRadius: '16px',
+              padding: '14px 18px',
+              border: '1px solid rgba(59, 130, 246, 0.15)',
+              borderRadius: '14px',
               fontSize: '14px',
               resize: 'none',
-              height: '56px',
+              height: '52px',
               fontFamily: 'inherit',
-              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+              backgroundColor: 'rgba(255, 255, 255, 0.03)',
               color: 'white',
               backdropFilter: 'blur(8px)',
               outline: 'none',
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              transition: 'all 0.3s ease',
+              boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.1)'
             }}
             rows={1}
             onKeyDown={(e) => {
@@ -1047,55 +1298,74 @@ What would you like to work on today?`,
             }}
             disabled={isLoading}
             onFocus={(e) => {
-              e.target.style.borderColor = '#3b82f6';
-              e.target.style.boxShadow = '0 0 0 4px rgba(59, 130, 246, 0.1)';
-              e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+              e.target.style.borderColor = 'rgba(59, 130, 246, 0.4)';
+              e.target.style.boxShadow = 'inset 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 3px rgba(59, 130, 246, 0.1)';
+              e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
             }}
             onBlur={(e) => {
-              e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-              e.target.style.boxShadow = 'none';
-              e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+              e.target.style.borderColor = 'rgba(59, 130, 246, 0.15)';
+              e.target.style.boxShadow = 'inset 0 1px 3px rgba(0, 0, 0, 0.1)';
+              e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
             }}
           />
           <button
             type="submit"
             disabled={isLoading || !inputMessage.trim()}
             style={{
-              width: '56px',
-              height: '56px',
+              width: '52px',
+              height: '52px',
               background: isLoading || !inputMessage.trim() 
-                ? 'rgba(107, 114, 128, 0.5)' 
-                : 'linear-gradient(135deg, #3b82f6, #2563eb)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '16px',
+                ? 'rgba(255, 255, 255, 0.05)' 
+                : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+              color: isLoading || !inputMessage.trim() ? '#475569' : 'white',
+              border: isLoading || !inputMessage.trim() 
+                ? '1px solid rgba(255, 255, 255, 0.08)' 
+                : 'none',
+              borderRadius: '14px',
               cursor: isLoading || !inputMessage.trim() ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               boxShadow: isLoading || !inputMessage.trim() 
                 ? 'none' 
-                : '0 8px 24px rgba(59, 130, 246, 0.3)',
+                : '0 8px 30px rgba(59, 130, 246, 0.3), 0 0 40px rgba(59, 130, 246, 0.1)',
               flexShrink: 0,
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              transition: 'all 0.3s ease',
+              position: 'relative',
+              overflow: 'hidden'
             }}
             onMouseEnter={(e) => {
               if (!isLoading && inputMessage.trim()) {
                 e.target.style.transform = 'scale(1.05)';
-                e.target.style.boxShadow = '0 12px 30px rgba(59, 130, 246, 0.4)';
+                e.target.style.boxShadow = '0 12px 40px rgba(59, 130, 246, 0.4), 0 0 60px rgba(59, 130, 246, 0.2)';
               }
             }}
             onMouseLeave={(e) => {
               if (!isLoading && inputMessage.trim()) {
                 e.target.style.transform = 'scale(1)';
-                e.target.style.boxShadow = '0 8px 24px rgba(59, 130, 246, 0.3)';
+                e.target.style.boxShadow = '0 8px 30px rgba(59, 130, 246, 0.3), 0 0 40px rgba(59, 130, 246, 0.1)';
               }
             }}
           >
+            {!isLoading && inputMessage.trim() && (
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: '-100%',
+                width: '100%',
+                height: '100%',
+                background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent)',
+                animation: 'shimmer 3s ease-in-out infinite'
+              }} />
+            )}
             {isLoading ? (
               <div style={{
-                width: '20px', height: '20px', border: '2px solid rgba(255, 255, 255, 0.3)',
-                borderTop: '2px solid white', borderRadius: '50%', animation: 'spin 1s linear infinite'
+                width: '20px', height: '20px', 
+                border: '2px solid rgba(255, 255, 255, 0.3)',
+                borderTop: '2px solid white', 
+                borderRadius: '50%', 
+                animation: 'spin 1s linear infinite'
               }}></div>
             ) : (
               <Send size={20} />
@@ -1109,32 +1379,134 @@ What would you like to work on today?`,
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
+        
         @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
+          0%, 100% { 
+            opacity: 1; 
+            transform: scale(1);
+          }
+          50% { 
+            opacity: 0.6; 
+            transform: scale(1.2);
+          }
+        }
+        
+        @keyframes scanLine {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        
+        @keyframes shimmer {
+          0% { left: -100%; }
+          100% { left: 100%; }
+        }
+        
+        @keyframes float {
+          0%, 100% { 
+            transform: translateY(0) translateX(0);
+            opacity: 0.3;
+          }
+          25% {
+            transform: translateY(-20px) translateX(10px);
+            opacity: 0.8;
+          }
+          50% { 
+            transform: translateY(-40px) translateX(-5px);
+            opacity: 0.5;
+          }
+          75% {
+            transform: translateY(-20px) translateX(-15px);
+            opacity: 0.9;
+          }
+        }
+        
+        @keyframes hexPulse {
+          0%, 100% { 
+            filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.4));
+          }
+          50% { 
+            filter: drop-shadow(0 0 24px rgba(59, 130, 246, 0.8));
+          }
+        }
+        
+        @keyframes borderGlow {
+          0%, 100% { 
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3), 
+                        inset 0 0 40px rgba(59, 130, 246, 0.03),
+                        0 0 60px rgba(59, 130, 246, 0.1);
+          }
+          50% { 
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3), 
+                        inset 0 0 60px rgba(59, 130, 246, 0.06),
+                        0 0 80px rgba(59, 130, 246, 0.2);
+          }
+        }
+        
+        @keyframes messageSlideIn {
+          from {
+            opacity: 0;
+            transform: translateY(20px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        
+        @keyframes ripple {
+          0% {
+            transform: scale(0.8);
+            opacity: 1;
+          }
+          100% {
+            transform: scale(2);
+            opacity: 0;
+          }
+        }
+        
+        button:active::before {
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 100%;
+          height: 100%;
+          background: radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, transparent 70%);
+          border-radius: 50%;
+          transform: translate(-50%, -50%) scale(0);
+          animation: ripple 0.6s ease-out;
+        }
+        
+        button:hover .action-indicator {
+          opacity: 1 !important;
+          animation: pulse 1.5s infinite;
         }
         
         .messages-scrollbar::-webkit-scrollbar {
-          width: 8px;
+          width: 10px;
         }
         
         .messages-scrollbar::-webkit-scrollbar-track {
-          background: rgba(255, 255, 255, 0.05);
-          border-radius: 4px;
+          background: rgba(15, 23, 42, 0.4);
+          border-radius: 5px;
+          border: 1px solid rgba(59, 130, 246, 0.1);
         }
         
         .messages-scrollbar::-webkit-scrollbar-thumb {
-          background: linear-gradient(135deg, #3b82f6, #2563eb);
-          border-radius: 4px;
+          background: linear-gradient(135deg, rgba(59, 130, 246, 0.8), rgba(139, 92, 246, 0.6));
+          border-radius: 5px;
+          border: 1px solid rgba(59, 130, 246, 0.3);
+          box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
         }
         
         .messages-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: linear-gradient(135deg, #2563eb, #1d4ed8);
+          background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+          box-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
         }
         
         .messages-scrollbar {
           scrollbar-width: thin;
-          scrollbar-color: #3b82f6 rgba(255, 255, 255, 0.05);
+          scrollbar-color: rgba(59, 130, 246, 0.8) rgba(15, 23, 42, 0.4);
         }
       `}</style>
     </div>
