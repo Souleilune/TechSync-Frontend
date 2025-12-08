@@ -1,4 +1,4 @@
-// frontend/src/components/PreAssessmentModal.jsx - ENHANCED WITH WEIGHTED PROFICIENCY
+// frontend/src/components/PreAssessmentModal.jsx - ENHANCED WITH PROJECT CHALLENGE LOGIC
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ChallengeAPI from '../services/challengeAPI';
 import TestResultsPanel from './TestResultsPanel';
@@ -23,55 +23,6 @@ import {
   TestTube2,
   Lock
 } from 'lucide-react';
-
-// ============================================
-// NEW: Weighted Proficiency Calculator
-// Harder challenges require HIGHER scores for same proficiency level
-// ============================================
-const calculateProficiency = (score, difficulty) => {
-  const requirements = {
-    easy: {
-      expert: 95,       // Need 95+ on easy to be "expert"
-      advanced: 85,     // Need 85+ on easy to be "advanced"
-      intermediate: 70, // Need 70+ on easy to be "intermediate"
-    },
-    medium: {
-      expert: 90,       // Need 90+ on medium to be "expert"
-      advanced: 75,     // Need 75+ on medium to be "advanced"
-      intermediate: 60, // Need 60+ on medium to be "intermediate"
-    },
-    hard: {
-      expert: 85,       // Need 85+ on hard to be "expert"
-      advanced: 70,     // Need 70+ on hard to be "advanced"
-      intermediate: 55, // Need 55+ on hard to be "intermediate"
-    },
-    expert: {
-      expert: 80,       // Need 80+ on expert challenge to be "expert"
-      advanced: 65,     // Need 65+ on expert to be "advanced"
-      intermediate: 50, // Need 50+ on expert to be "intermediate"
-    }
-  };
-
-  const req = requirements[difficulty?.toLowerCase()] || requirements.easy;
-
-  if (score >= req.expert) return 'expert';
-  if (score >= req.advanced) return 'advanced';
-  if (score >= req.intermediate) return 'intermediate';
-  return 'beginner';
-};
-
-// ============================================
-// NEW: Get proficiency display info
-// ============================================
-const getProficiencyInfo = (level) => {
-  const info = {
-    beginner: { color: '#94a3b8', label: 'Beginner', icon: '🌱' },
-    intermediate: { color: '#f59e0b', label: 'Intermediate', icon: '📚' },
-    advanced: { color: '#3b82f6', label: 'Advanced', icon: '⭐' },
-    expert: { color: '#8b5cf6', label: 'Expert', icon: '🏆' }
-  };
-  return info[level] || info.beginner;
-};
 
 const PreAssessmentModal = ({ language, onComplete, onClose }) => {
   // Core states
@@ -117,6 +68,7 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
       
       console.log('📦 Challenge response:', response);
 
+      // Backend returns: { success: true, data: { challenge: {...}, userRating: ... } }
       if (response.success && response.data && response.data.challenge) {
         const challengeData = response.data.challenge;
         console.log('✅ Challenge loaded:', challengeData);
@@ -143,7 +95,7 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
     }
   }, [challenge]);
 
-  // Timer countdown effect
+  // Timer countdown effect (migrated from ProjectChallengeInterface)
   useEffect(() => {
     if (!startedAt || !challenge?.time_limit_minutes || result) return;
 
@@ -180,7 +132,7 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
     loadChallenge();
   }, [language.language_id]);
 
-  // Tab switching detection
+  // Tab switching detection (migrated from ProjectChallengeInterface)
   useEffect(() => {
     if (!startedAt) return;
 
@@ -220,7 +172,7 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
     };
   }, [startedAt]);
 
-  // Code validation
+  // Code validation (migrated from ProjectChallengeInterface)
   const validateCode = useCallback((code) => {
     const validation = {
       isEmpty: !code || code.trim().length === 0,
@@ -285,7 +237,7 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
     }
   };
 
-  // Handle paste detection
+  // Handle paste detection (migrated from ProjectChallengeInterface)
   const handlePaste = (e) => {
     if (!startedAt || result) return;
     
@@ -299,7 +251,7 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
     console.warn('⚠️ Paste detected during assessment');
   };
 
-  // Handle copy/cut prevention
+  // Handle copy/cut prevention (migrated from ProjectChallengeInterface)
   const handleCopy = (e) => {
     if (!startedAt || result) return;
     console.log('📋 Copy detected (allowed for user convenience)');
@@ -328,6 +280,7 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
 
       console.log('⛔ Auto-failing due to tab switching violations');
 
+      // Call onComplete with failure result
       onComplete({
         languageId: language.language_id,
         passed: false,
@@ -344,9 +297,7 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
     }
   }, [language, onComplete, isSubmitting]);
 
-  // ============================================
-  // UPDATED: Submit challenge with weighted proficiency
-  // ============================================
+  // Submit challenge (migrated from ProjectChallengeInterface)
   const handleSubmitChallenge = useCallback(async () => {
     if (!submittedCode.trim()) {
       setError('Please write your solution before submitting.');
@@ -367,8 +318,7 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
       console.log('📝 Submitting assessment:', {
         challenge_id: challenge.id,
         programming_language_id: language.language_id,
-        code_length: submittedCode.length,
-        difficulty: challenge.difficulty_level  // Log difficulty for debugging
+        code_length: submittedCode.length
       });
 
       const response = await ChallengeAPI.submitSimpleChallenge(attemptData);
@@ -378,34 +328,25 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
       if (response.success) {
         const attemptResult = response.attempt || response.data;
         const evaluation = response.evaluation || {};
-        const score = attemptResult.score || evaluation.score || 0;
-        const difficulty = challenge.difficulty_level || 'easy';
         
-        // ✅ NEW: Use weighted proficiency calculation
-        const proficiencyLevel = calculateProficiency(score, difficulty);
-        
-        console.log('📊 Proficiency calculated:', {
-          rawScore: score,
-          difficulty,
-          proficiencyLevel,
-          // Show what thresholds were used
-          thresholds: {
-            easy: { expert: 95, advanced: 85, intermediate: 70 },
-            medium: { expert: 90, advanced: 75, intermediate: 60 },
-            hard: { expert: 85, advanced: 70, intermediate: 55 },
-            expert: { expert: 80, advanced: 65, intermediate: 50 }
-          }[difficulty]
-        });
-
-        // Store result for display (include calculated proficiency)
+        // Store result for display
         setResult({
           ...attemptResult,
           evaluation,
           passed: attemptResult.status === 'passed' || attemptResult.passed,
-          score: score,
-          proficiencyLevel,  // ✅ Store calculated proficiency
-          difficulty         // ✅ Store difficulty for display
+          score: attemptResult.score || evaluation.score || 0
         });
+
+        // Determine proficiency level based on score
+        let proficiencyLevel = 'beginner';
+        const score = attemptResult.score || evaluation.score || 0;
+        
+        if (score >= 90) proficiencyLevel = 'expert';
+        else if (score >= 75) proficiencyLevel = 'advanced';
+        else if (score >= 60) proficiencyLevel = 'intermediate';
+
+        // Only call onComplete after user sees results (don't auto-close)
+        // The user will see the results and can then proceed
         
       } else {
         throw new Error(response.message || 'Failed to submit assessment');
@@ -441,35 +382,29 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
     }
   };
 
-  // ============================================
-  // UPDATED: Continue handler uses stored proficiency
-  // ============================================
+  // Continue to next language or complete
   const handleContinueAfterResult = () => {
-    if (!result) return;
+  if (!result) return;
 
-    // ✅ Use the already-calculated proficiency from result
-    const proficiencyLevel = result.proficiencyLevel || calculateProficiency(
-      result.score, 
-      challenge?.difficulty_level || 'easy'
-    );
+  const proficiencyLevel = 
+    result.score >= 90 ? 'expert' :
+    result.score >= 75 ? 'advanced' :
+    result.score >= 60 ? 'intermediate' : 'beginner';
 
-    console.log('🎯 Completing assessment:', {
-      score: result.score,
-      difficulty: challenge?.difficulty_level,
-      proficiencyLevel,
-      passed: result.passed || result.score >= 50
-    });
+  console.log('🎯 Preparing to complete assessment with result:', result);
+  console.log('🔑 Challenge ID:', challenge.id);
 
-    onComplete({
-      languageId: language.language_id,
-      passed: result.passed || result.score >= 50,
-      score: result.score,
-      proficiencyLevel,
-      feedback: result.evaluation?.feedback || result.feedback || 'Assessment complete',
-      attemptId: result.id || result.attempt_id,
-      challengeId: challenge.id
-    });
-  };
+  onComplete({
+    languageId: language.language_id,
+    passed: result.passed || result.score >= 50,
+    score: result.score,
+    proficiencyLevel,
+    feedback: result.evaluation?.feedback || result.feedback || 'Assessment complete',
+    // ✅ CRITICAL: These IDs are needed by Profile.js
+    attemptId: result.id || result.attempt_id,
+    challengeId: challenge.id
+  });
+};
 
   if (loading) {
     return (
@@ -532,9 +467,6 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.5; }
-        }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
         }
       `}</style>
 
@@ -802,9 +734,7 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
               </div>
             )}
 
-            {/* ============================================ */}
-            {/* UPDATED: Results Display with Proficiency */}
-            {/* ============================================ */}
+            {/* Results Display */}
             {result && (
               <div style={styles.resultsContainer}>
                 <div style={{
@@ -828,37 +758,6 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
                         Assessment Complete
                       </h3>
                       <p style={styles.resultScore}>Score: {result.score}%</p>
-                    </div>
-                  </div>
-
-                  {/* ✅ NEW: Proficiency Level Display */}
-                  <div style={styles.proficiencyDisplay}>
-                    <div style={styles.proficiencyLabel}>Your Proficiency Level:</div>
-                    <div style={{
-                      ...styles.proficiencyBadge,
-                      backgroundColor: `${getProficiencyInfo(result.proficiencyLevel).color}20`,
-                      borderColor: `${getProficiencyInfo(result.proficiencyLevel).color}40`,
-                      color: getProficiencyInfo(result.proficiencyLevel).color
-                    }}>
-                      <span style={styles.proficiencyIcon}>
-                        {getProficiencyInfo(result.proficiencyLevel).icon}
-                      </span>
-                      <span style={styles.proficiencyText}>
-                        {getProficiencyInfo(result.proficiencyLevel).label}
-                      </span>
-                    </div>
-                    
-                    {/* ✅ NEW: Show difficulty context */}
-                    <div style={styles.difficultyContext}>
-                      Challenge Difficulty: 
-                      <span style={{ 
-                        color: getDifficultyColor(result.difficulty || challenge?.difficulty_level),
-                        fontWeight: '600',
-                        marginLeft: '8px'
-                      }}>
-                        {(result.difficulty || challenge?.difficulty_level || 'easy').charAt(0).toUpperCase() + 
-                         (result.difficulty || challenge?.difficulty_level || 'easy').slice(1)}
-                      </span>
                     </div>
                   </div>
 
@@ -1022,11 +921,8 @@ const PreAssessmentModal = ({ language, onComplete, onClose }) => {
   );
 };
 
-// ============================================
-// UPDATED STYLES - Added proficiency display styles
-// ============================================
+// Styles (matching ProjectChallengeInterface styling)
 const styles = {
-  // ... (keep all your existing styles)
   overlay: {
     position: 'fixed',
     inset: 0,
@@ -1431,43 +1327,6 @@ const styles = {
     color: '#94a3b8',
     margin: 0
   },
-  
-  // ✅ NEW: Proficiency display styles
-  proficiencyDisplay: {
-    padding: '16px',
-    background: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: '12px',
-    marginBottom: '16px',
-    textAlign: 'center'
-  },
-  proficiencyLabel: {
-    fontSize: '14px',
-    color: '#94a3b8',
-    marginBottom: '12px'
-  },
-  proficiencyBadge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '10px',
-    padding: '12px 24px',
-    borderRadius: '12px',
-    border: '2px solid',
-    fontSize: '18px',
-    fontWeight: '700'
-  },
-  proficiencyIcon: {
-    fontSize: '24px'
-  },
-  proficiencyText: {
-    textTransform: 'uppercase',
-    letterSpacing: '1px'
-  },
-  difficultyContext: {
-    marginTop: '12px',
-    fontSize: '13px',
-    color: '#64748b'
-  },
-  
   resultFeedback: {
     padding: '16px',
     background: 'rgba(0, 0, 0, 0.3)',
